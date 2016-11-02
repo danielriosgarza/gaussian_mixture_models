@@ -28,7 +28,7 @@ def one_dimensional_gaussian_mixture_model(data_vector, k_clusters, max_iter):
         cluster_probabilities = np.array([d_bayesian_operand(distribution_probabilities[z], priors) for z in xrange(len(distribution_probabilities))])
         
         priors = prior_update(cluster_probabilities)
-        gaussians = {z:st.norm(weighted_means_var(data_vector, cluster_probabilities.T[z])[0], weighted_means_var(data_vector, cluster_probabilities.T[z])[1]) for z in xrange(k_clusters))}
+        gaussians = {z:st.norm(weighted_means_var(data_vector, cluster_probabilities.T[z])[0], weighted_means_var(data_vector, cluster_probabilities.T[z])[1]) for z in xrange(k_clusters)}
         
     hard_assignments = [list(cluster_probabilities[i]).index(max(cluster_probabilities[i])) for i in xrange(len(cluster_probabilities))]
     return {'hard_assignments': hard_assignments, 'cluster_probabilities':cluster_probabilities, 'means' :[weighted_means_var(data_vector, cluster_probabilities.T[i])[0] for i in xrange(len(cluster_probabilities.T))], 'variance': [weighted_means_var(data_vector, cluster_probabilities.T[i])[1] for i in xrange(len(cluster_probabilities.T))]}
