@@ -4,6 +4,13 @@ import numpy as np
 import scipy.stats as sts
 import useful_functions as uf
 
+def posterior_estimate(data_set, mu, sigma_2):
+    '''sum the log-likelihood of each data point under a Gaussian pdf'''
+    
+    e = [uf.Gaussian_pdf(x=1, mu=mu, precision = 1./sigma_2, log_form = 1) for i in data_set] #notice the the function uses the precision
+    return sum(e)
+
+
 def make_param_dict(k_0, v_0, mu_0, sigma_2_0):
     '''make a dictionary with the prior parameters for Gibbs sampling.
     updatated parameters are the 'up_...' entries of the dictionary,
@@ -54,23 +61,29 @@ def Gibbs_sampler(param_dict):
     mu = draw_mu(param_dict, sigma_2)
     return np.random.normal(loc=mu, scale=sqrt(sigma_2))
 
-def draw_from_collapsed_Gibbs_sampler(param_dict):
-    return sts.t(df = param_dict['prior_v0'], loc = param_dict['prior_mu'],scale = sqrt(((param_dict['prior_k0']+1)/(param_dict['prior_k0']*param_dict['prior_v0'])) * param_dict['prior_sigma_2'])).rvs()
+def draw_from_collapsed_Gibbs_sampler(param_dict, t_runs):
+    return sts.t(df = param_dict['up_v_0'], loc = param_dict['up_mu_0'],scale = sqrt(((param_dict['up_k_0']+1)/(param_dict['up_k_0']*param_dict['up_v_0'])) * param_dict['up_sigma_2_0'])).rvs(t_runs)
 
 #example_data
 
-data_set = np.array([np.random.poisson(60) for i in xrange(1000)])
+data_set = np.array([np.random.poisson(60) for i in xrange(100)])
 param_dict = make_param_dict(k_0=10, v_0 =10, mu_0=0, sigma_2_0=1)
 
 
 update_parameters(param_dict, data_set)
 
-gibbs_sample = np.array([Gibbs_sampler(param_dict) for i in xrange(50000)])
-#collapsed_gibbs_sample = np.array([draw_from_collapsed_Gibbs_sampler(param_dict) for i in xrange(5000)])
+gibbs_sample = np.array([Gibbs_sampler(param_dict) for i in xrange(10000)])
+collapsed_gibbs_sample = draw_from_collapsed_Gibbs_sampler(param_dict, 10000)
 
 g2 = []
 
 
+for i in xrange(10, len(collapsed_gibbs_sample)):
+    g2.append(uf.estimate_convergence(data_set, collapsed_gibbs_sample[0:i]))
+
+
+g = []
+
+
 for i in xrange(10, len(gibbs_sample)):
-    g2.append(uf.estimate_convergence(data_set, gibbs_sample[0:i]))
-    
+    g.append(uf.estimate_convergence(data_set, gibbs_sample[0:i]))
