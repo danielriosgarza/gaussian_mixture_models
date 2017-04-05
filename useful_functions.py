@@ -83,3 +83,16 @@ def estimate_convergence(data_set, simulation_set):
     
     #convergence estimate (converges to 1)
     return sqrt(var_mp/W)
+
+
+def determinant(L):
+    '''compute the determinant of a cholesky decomposition.
+    if A = LL', the function returns det(A)'''
+    return np.prod(diag(L)**2)
+
+
+def wishart_pdf(X, V, L_X, L_V,v, d):
+    multigam = spe.multigammaln(0.5*v, d)
+    det_V = determinant(L_V)  
+    det_X = determinant(L_X)
+    
