@@ -44,3 +44,42 @@ def gamma_pdf(x, alpha, theta, log_form=False):
         return t1+t2+t3+t4
     else:
         return math.exp(t1+t2+t3+t4)
+
+
+
+def Gaussian_pdf(x, mu, precision, log_form = False):
+    delta = (x-mu)**2
+    t1 = math.log(0.5*(precision/math.pi))
+    t2 = -precision*delta
+    
+    if log_form:
+        return 0.5*(t1+t2)
+    else:
+        return math.exp(0.5*(t1+t2))
+    
+def estimate_convergence(data_set, simulation_set):
+    '''convergence estimator for scalar quantities,
+    based on the within and between variances of
+    data and simulated sets'''
+    #constants
+    d_n = len(data_set)
+    s_n  = len(simulation_set)
+    n = d_n+s_n
+    n_m = 0.5*n
+    mean_d = mean(data_set)
+    mean_s = mean(simulation_set)
+    mean_t = 0.5*(mean_d+mean_s)
+    var_d = (1./(d_n-1))*sum((data_set-mean_d)**2)
+    var_s = (1./(s_n-1))*sum((simulation_set-mean_d)**2)
+    
+    #Between variance
+    B = n_m*(((mean_d-mean_t)**2)+((mean_d-mean_t)**2))
+    
+    #within variance
+    W = 0.5*(var_d+var_s)
+    
+    #marginal posterior variance estimand
+    var_mp = ((n-1.)/n)*W + (1./n)*B
+    
+    #convergence estimate (converges to 1)
+    return sqrt(var_mp/W)
