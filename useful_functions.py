@@ -5,6 +5,65 @@ import scipy.stats as sts
 import math
 import scipy.special as spe
 
+def multivariate_t_rvs_chol(mu, L, df, n=1):
+    '''generate a random variable from multivariate t ditribution inputing directly the
+    Cholesky decomposition of the covariace matrix.
+    Parameters
+    ----------
+    mu : array_like
+        mean of random variable, length determines dimension of random variable
+    L : array_like
+        Cholesky decomposition of the covariance  matrix
+    df : int or float
+        degrees of freedom
+    n : int
+        number of observations, return random array will be (n, len(m))
+
+    Returns
+    -------
+    rvs : ndarray, (n, len(m))
+        each row is an independent draw of a multivariate t distributed
+        random variable
+    '''
+    d = len(mu)
+    if df == np.inf:
+        x = 1.
+    else:
+        x = np.sqrt(df/np.random.chisquare(df, n))
+    return np.array([mu+(L.dot(np.random.standard_normal(d))*x[i]) for i in xrange(n)])
+
+
+
+def multivariate_t_rvs(mu, S, df=np.inf, n=1):
+    '''generate random variables of multivariate t distribution
+
+    Parameters
+    ----------
+    mu : array_like
+        mean of random variable, length determines dimension of random variable
+    S : array_like
+        square array of covariance  matrix
+    df : int or float
+        degrees of freedom
+    n : int
+        number of observations, return random array will be (n, len(m))
+
+    Returns
+    -------
+    rvs : ndarray, (n, len(mu))
+        each row is an independent draw of a multivariate t distributed
+        random variable
+
+
+    '''
+    mu = np.asarray(mu)
+    d = len(mu)
+    if df == np.inf:
+        x = 1.
+    else:
+        x = np.random.chisquare(df, n)/df
+    z = np.random.multivariate_normal(np.zeros(d),S,(n,))
+    return mu + z/np.sqrt(x)[:,None]   # same output format as random.multivariate_normal
 
 def cholesky_r1_update(L, X):
     '''perform a rank 1 update of
@@ -85,14 +144,40 @@ def estimate_convergence(data_set, simulation_set):
     return sqrt(var_mp/W)
 
 
-def determinant(L):
+def chol_determinant(L):
     '''compute the determinant of a cholesky decomposition.
     if A = LL', the function returns det(A)'''
     return np.prod(diag(L)**2)
 
+def chol_log_determinant(L):
+    '''compute the determinant of a cholesky decomposition.
+    if A = LL', the function returns det(A)'''
+    return np.sum(2*log(diag(L)))
 
-def wishart_pdf(X, V, L_X, L_V,v, d):
-    multigam = spe.multigammaln(0.5*v, d)
-    det_V = determinant(L_V)  
-    det_X = determinant(L_X)
+def wishart_pdf(X, V, v, d, chol=False, log_form = False):
+    '''Wishart probability density '''
     
+    #constants
+    
+    if chol:
+        det_X = chol_log_determinant(X)
+        idet_V = (-1)*chol_log_determinant(V)
+        trace = np.einsum('ij,ji', V.dot(V.T), X.dot(X.T))
+    else:
+        det_X = np.linalg.slogdet(X)[1]
+        idet_V = (-1)*np.linalg.slogdet(V)[1]
+        trace = np.trace(V.dot(X))
+
+    #
+    
+    p1 = 0.5*(v-d-1)*det_X
+    p2 = -0.5*trace
+    p3 = -0.5*(v*d)*math.log(2)
+    p4 = -0.5*(v)*idet_V
+    p5 = -spe.multigammaln(0.5*v,d)
+    
+    if log_form:
+       return p1+p2+p3+p4+p5
+    else:
+        return math.exp(p1+p2+p3+p4+p5)
+        
