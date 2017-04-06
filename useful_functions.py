@@ -4,6 +4,8 @@ import numpy as np
 import scipy.stats as sts
 import math
 import scipy.special as spe
+import scipy.linalg.lapack as lpack
+
 
 def multivariate_t_rvs_chol(mu, L, df, n=1):
     '''generate a random variable from multivariate t ditribution inputing directly the
@@ -154,30 +156,127 @@ def chol_log_determinant(L):
     if A = LL', the function returns det(A)'''
     return np.sum(2*log(diag(L)))
 
-def wishart_pdf(X, V, v, d, chol=False, log_form = False):
-    '''Wishart probability density '''
+
+        
+def wishart_pdf(X, S, v, d, chol=False, log_form = False):
+    '''Wishart probability density with possible use of the cholesky decomposition of S.
+    Returns the same output as scipy.stats.wishart(df=v, scale=S).pdf(X).
+    
+    The equation is (Wikipedia or Kevin P. Murphy, 2007):
+        {|X|**[0.5(v-d-1)] exp[-0.5tr(inv(S)X)]}/{2**[0.5vd] |S|**[0.5v] [multivariate_gamma_function(0.5v, d)]}
+    
+    Tom Minka (1998) has a different for for the equation, but both are equivalent:
+        {1}/{[multivariate_gamma_function(0.5v, d)] |X|**(0.5(d+1))} {|0.5X inv(S)|**(0.5v)} {exp[-0.5tr(inv(S)X)]}
+        
+    Parameters
+    ----------
+    X: array-like. 
+    Positive definite dxd matrix for which the probability function is to be estimated.
+    If chol, this must be the matrix L, instead. L is a lower triangular decomposition of X, such that X = LL'.
+    
+    S:array-like
+    Positive definite dxd scale matrix
+    If chol, this must be the matrix L2, instead. L2 is a lower triangular decomposition of S, such that S = L2L2'
+    
+    v: int or float.
+    degrees of freedom for the distributio. v must be >d
+    
+    d: int
+    dimension of each role or column of X
+    
+    
+    Outputs
+    --------
+    If log_form returns the logpdf estimate of X, else it returns the pdf estimate of X
+    '''
     
     #constants
     
     if chol:
         det_X = chol_log_determinant(X)
-        idet_V = (-1)*chol_log_determinant(V)
-        trace = np.einsum('ij,ji', V.dot(V.T), X.dot(X.T))
+        det_S = chol_log_determinant(S)
+        iS = lpack.dtrtri(S, lower=1)[0]
+        trace = np.einsum('ij,ji', iS.T.dot(iS), X.dot(X.T))
+
+           
     else:
         det_X = np.linalg.slogdet(X)[1]
-        idet_V = (-1)*np.linalg.slogdet(V)[1]
-        trace = np.trace(V.dot(X))
+        det_S = np.linalg.slogdet(S)[1]
+        trace = np.trace(np.linalg.inv(S).dot(X))
 
     #
     
+       
     p1 = 0.5*(v-d-1)*det_X
     p2 = -0.5*trace
     p3 = -0.5*(v*d)*math.log(2)
-    p4 = -0.5*(v)*idet_V
+    p4 = -0.5*(v)*det_S
     p5 = -spe.multigammaln(0.5*v,d)
     
     if log_form:
-       return p1+p2+p3+p4+p5
+        return p1+p2+p3+p4+p5
     else:
         return math.exp(p1+p2+p3+p4+p5)
+    
+    
+def invwishart_pdf(X, S, v, d, chol=False, log_form = False):
+    '''Inverse Wishart probability density with possible use of the cholesky decomposition of S and X.
+    Returns the same output as scipy.stats.invwishart(df=v, scale=S).pdf(X).
+    
+    The equation is (Wikipedia or Kevin P. Murphy, 2007):
+        {|X|**[0.5(v-d-1)] exp[-0.5tr(inv(S)X)]}/{2**[0.5vd] |S|**[0.5v] [multivariate_gamma_function(0.5v, d)]}
+    
+    Tom Minka (1998) has a different for for the equation, but both are equivalent:
+        {1}/{[multivariate_gamma_function(0.5v, d)] |X|**(0.5(d+1))} {|0.5X inv(S)|**(0.5v)} {exp[-0.5tr(inv(S)X)]}
+        
+    Parameters
+    ----------
+    X: array-like. 
+    Positive definite dxd matrix for which the probability function is to be estimated.
+    If chol, this must be the matrix L, instead. L is a lower triangular decomposition of X, such that X = LL'.
+    
+    S:array-like
+    Positive definite dxd scale matrix
+    If chol, this must be the matrix L2, instead. L2 is a lower triangular decomposition of S, such that S = L2L2'
+    
+    v: int or float.
+    degrees of freedom for the distributio. v must be >d
+    
+    d: int
+    dimension of each role or column of X
+    
+    
+    Outputs
+    --------
+    If log_form returns the logpdf estimate of X, else it returns the pdf estimate of X
+    '''
+    
+    #constants
+    
+    if chol:
+        det_X = chol_log_determinant(X)
+        det_S = chol_log_determinant(S)
+        iX = lpack.dtrtri(X, lower=1)[0]
+        trace = np.einsum('ij,ji', S.dot(S.T),iX.T.dot(iX))
+
+           
+    else:
+        det_X = np.linalg.slogdet(X)[1]
+        det_S = np.linalg.slogdet(S)[1]
+        trace = np.trace(S.dot(np.linalg.inv(X)))
+
+    #
+    
+    p1 = -0.5*(v*d)*math.log(2)
+    p2 = -spe.multigammaln(0.5*v,d)
+    p3 = 0.5*(v)*det_S
+    p4 = -0.5*(v+d+1)*det_X
+    p5 = -0.5*trace
+       
+    
+    if log_form:
+        return p1+p2+p3+p4+p5
+    else:
+        return math.exp(p1+p2+p3+p4+p5)
+           
         
