@@ -281,7 +281,8 @@ def invwishart_pdf(X, S, v, d, chol=False, log_form = False):
     else:
         return math.exp(p1+p2+p3+p4+p5)
  
-def multivariate_normal_distribution(X, mu_v, prec_m, chol=False, log_form=False):
+def multivariate_normal_pdf(X, mu_v, prec_m, chol=False, log_form=False):
+    
 
     #constants
     d =len(mu_v)
