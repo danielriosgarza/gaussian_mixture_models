@@ -5,6 +5,10 @@ import scipy.stats as sts
 import math
 import scipy.special as spe
 import scipy.linalg.lapack as lpack
+import scipy.linalg as linalg
+#%alias_magic t timeit
+trm = linalg.get_blas_funcs('trmm') #multiply triangular matrices. If lower use lower=1.
+
 
 
 def multivariate_t_rvs_chol(mu, L, df, n=1):
@@ -165,7 +169,7 @@ def wishart_pdf(X, S, v, d, chol=False, log_form = False):
     The equation is (Wikipedia or Kevin P. Murphy, 2007):
         {|X|**[0.5(v-d-1)] exp[-0.5tr(inv(S)X)]}/{2**[0.5vd] |S|**[0.5v] [multivariate_gamma_function(0.5v, d)]}
     
-    Tom Minka (1998) has a different for for the equation, but both are equivalent:
+    Thomas Minka (1998) has a different form for the equation, but both are equivalent for the same inputs:
         {1}/{[multivariate_gamma_function(0.5v, d)] |X|**(0.5(d+1))} {|0.5X inv(S)|**(0.5v)} {exp[-0.5tr(inv(S)X)]}
         
     Parameters
@@ -179,10 +183,10 @@ def wishart_pdf(X, S, v, d, chol=False, log_form = False):
     If chol, this must be the matrix L2, instead. L2 is a lower triangular decomposition of S, such that S = L2L2'
     
     v: int or float.
-    degrees of freedom for the distributio. v must be >d
+    degrees of freedom for the distribution. v must be >d
     
     d: int
-    dimension of each role or column of X
+    dimension of each row or column of X
     
     
     Outputs
@@ -221,14 +225,12 @@ def wishart_pdf(X, S, v, d, chol=False, log_form = False):
     
 def invwishart_pdf(X, S, v, d, chol=False, log_form = False):
     '''Inverse Wishart probability density with possible use of the cholesky decomposition of S and X.
-    Returns the same output as scipy.stats.invwishart(df=v, scale=S).pdf(X).
+    Returns the output that is comparable to scipy.stats.invwishart(df=v, scale=S).pdf(X). 
     
     The equation is (Wikipedia or Kevin P. Murphy, 2007):
-        {|X|**[0.5(v-d-1)] exp[-0.5tr(inv(S)X)]}/{2**[0.5vd] |S|**[0.5v] [multivariate_gamma_function(0.5v, d)]}
+        {|S|**[0.5v] |X|**[-0.5(v+d+1)] exp[-0.5tr(S inv(X))]}/{2**[0.5vd]  [multivariate_gamma_function(0.5v, d)]}
     
-    Tom Minka (1998) has a different for for the equation, but both are equivalent:
-        {1}/{[multivariate_gamma_function(0.5v, d)] |X|**(0.5(d+1))} {|0.5X inv(S)|**(0.5v)} {exp[-0.5tr(inv(S)X)]}
-        
+     
     Parameters
     ----------
     X: array-like. 
@@ -240,10 +242,10 @@ def invwishart_pdf(X, S, v, d, chol=False, log_form = False):
     If chol, this must be the matrix L2, instead. L2 is a lower triangular decomposition of S, such that S = L2L2'
     
     v: int or float.
-    degrees of freedom for the distributio. v must be >d
+    degrees of freedom for the distribution. v must be >d
     
     d: int
-    dimension of each role or column of X
+    dimension of each row or column of X
     
     
     Outputs
@@ -278,5 +280,27 @@ def invwishart_pdf(X, S, v, d, chol=False, log_form = False):
         return p1+p2+p3+p4+p5
     else:
         return math.exp(p1+p2+p3+p4+p5)
-           
-        
+ 
+def multivariate_normal_distribution(X, mu_v, prec_m, chol=False, log_form=False):
+
+    #constants
+    d =len(mu_v)
+    delta = X-mu_v
+    if chol:
+        det = chol_log_determinant(prec_m)
+        inexp = delta.dot(prec_m).dot(trm(1,prec_m.T,delta))
+
+    else:
+        det = np.linalg.slogdet(prec_m)[1]
+        inexp = delta.dot(prec_m).dot(delta)
+    
+    p1 = (-0.5*d)*math.log(2*math.pi)
+    p2 = 0.5*det
+    p3 = -0.5*inexp
+    
+    if log_form:
+        return p1+p2+p3
+    else:
+        return exp(p1+p2+p3)
+
+    
