@@ -9,6 +9,82 @@ import scipy.linalg as linalg
 #%alias_magic t timeit
 trm = linalg.get_blas_funcs('trmm') #multiply triangular matrices. If lower use lower=1.
 
+def scatter_matrix(X, E_mu = False, P_mu=None, P_k=1):
+    '''get the scatter matrix of multidimensional data.
+    with possibility of returning the empirical mean, since it's one of the steps in the
+    computation of the scatter matrix. Can be used with a prior mean (see 'store_sufficient_statistic' function).
+
+    The scatter matrix is positive semi-definite matrix defined by:
+    sum[(Xi-mean(X))' *(Xi-mean(X))].
+    The approach used in this function is based on the centering matrix(Wikipedia):
+        - Centering Matrix: C= I(n) - [n**(-1)]*11' 
+        (I(n) is n-dimensional identity matrix 11' is nxn matrix of ones.)
+        - Scatter matrix = XCX'
+        - Empirical mean = X-XC
+    If a prior mean is provided. The approach is based in Thomas Minka(1998, sec. 7) and mounts 
+    to subtracting the prior mean from each data component and dividing by n + P_k. If used,
+    The final S is sum{[Xi-(P_k*mu_0 + n*mean(X))/(P_k+n)]' *[Xi-(P_k*mu_0 + n*mean(X))/(P_k+n)]}: 
+    
+    Parameters
+    ---------
+    data_set: array-like
+    multidimensional data. N columns of data-points in M dimensions. This means that the input array needs to be 
+    in the shape of (M,N).
+    
+    Output
+    ---------
+    returns the scatter matrix of the data in array-like format and the empirical mean if required.'''
+    
+    ds = np.array(X)
+    N = size(ds[0]) #number of samples
+    dim = len(ds) #dimensions
+    if type(P_mu) is np.ndarray:
+        ds = ds-P_mu.dot(np.ones((1,N))) #subtract prior mean from X
+        C = np.eye(N) - (1./(N+P_k))*np.ones(N) #centering matrix considering P_k
+    else:
+        C = np.eye(N) - (1./N)*np.ones(N) #centering matrix
+        
+    if  E_mu:
+        E = ds.dot(C)#X-E is the empirical mean
+        return E.dot(ds.T), (X-E).T[0]
+    else :
+        return ds.dot(C).dot(ds.T)
+
+def store_sufficient_statistics_mvGaussian(X, P_mu=None, P_k=1):
+    '''stores sufficient statistics to evaluate the likelihood of a dataset under a Gaussian
+    multivariate probability model. Is to be used with the function 'multivariate_Gaussian_likelihood'.
+    It can handle a prior mean and 'pseudo-counts' , and thus store the sufficient statistics of a seperate
+    subset of data. For detailes see Thomas Minka(1998, sec. 7).
+    
+    
+    Parameters
+    --------
+    X: array-like
+    Vector of observations assumed to be iid mvGaussian. len(X) should return the number of observations, and len(X[0]) 
+    the dimensionallity. (shape = (n, d)). To assure the correct dimensionality in the dot products, this is transposed
+    in the function to retrieve the scatter_matrix.
+    
+    P_mu: array-like. *optional
+    A prior mean or a mean from previous observations. If used, the sufficient statistic will be stored taking into account
+    a weighted average of prior plus sample
+    
+    P_k: int float
+    Weight given as 'confidence' for the prior, or pseudo counts, or previous samples when evaluating the posterior
+    predictive probability of a new set of observations
+    
+    Output
+    --------
+    A dictionary with the sufficient statistics to be used in the likelihood function. 'n' = P_k+n, 
+    'E_mu=[(P_k*mu_0)+(n*mu)]/[P_k+n], S_m=scatter matrix'''
+    
+    n = len(X) #number of data_points
+    if type(P_mu) is np.ndarray:
+        S_m, E_mu= scatter_matrix(X.T, E_mu=1,P_mu=P_mu, P_k=P_k) #scatter matrix, empirical mean
+        n+=P_k #add the prior counts
+    else:
+        S_m, E_mu= scatter_matrix(X.T, E_mu=1)
+    
+    return {'n':n, 'E_mu':E_mu, 'S_m' :S_m}
 
 
 def multivariate_t_rvs_chol(mu, L, df, n=1):
@@ -281,15 +357,41 @@ def invwishart_pdf(X, S, v, d, chol=False, log_form = False):
     else:
         return math.exp(p1+p2+p3+p4+p5)
  
-def multivariate_normal_pdf(X, mu_v, prec_m, chol=False, log_form=False):
+def multivariate_Gaussian_pdf(X, mu_v, prec_m, chol=False, log_form=False):
+    '''Multivariate normal probability function with possibility of using the cholesky decomposition
+    of the precision matrix. The function is paraterized by the precision instead of the covariance matrix.
+    This avoids the need to take the inverse of the covariace, which gives a significant gain in speed. The 
+    cholesky parametrization is aprox. 5 times faster because of the determinant. Even with the additional 
+    dot product.
     
-
-    #constants
-    d =len(mu_v)
+    The equation is (Wikipediaor Kevin P. Murphy, 2007):
+        (2pi)**(-0.5*d) |prec_m|**(0.5) exp[0.5(X-mu_v)' prec_m (x-mu_v)]
+    Should give the same result as scipy.stats.multivariate_normal(mu_v, inv(prec_m)).pdf(X)
+    Parameter
+    --------
+    X: array-like
+    d-dimensional vector of observations assumed to come from a multivariate Gaussian with the
+    same number of components.
+    
+    mu_v: array-like
+    d-dimensional vector of the mean parameter for the Gaussian.
+    
+    prec_m: array-like
+    dXd precision matrix. matrix must be symmetric positive definite and is the inverse of
+    the covariance matrix. prec_m = inv(cov_matrix). If the cholesky parametrization is
+    selected, this parameter must be the lower triangular decomposition of the precision
+    matrix, L. prec_matrix = LL'
+    
+      Outputs
+    --------
+    If log_form returns the logpdf estimate of X, else it returns the pdf estimate of X
+    '''
+   #constants
+    d =len(mu_v) #dimension
     delta = X-mu_v
     if chol:
         det = chol_log_determinant(prec_m)
-        inexp = delta.dot(prec_m).dot(trm(1,prec_m.T,delta))
+        inexp = delta.dot(prec_m).dot(trm(1,prec_m.T,delta, lower=1))
 
     else:
         det = np.linalg.slogdet(prec_m)[1]
@@ -304,4 +406,43 @@ def multivariate_normal_pdf(X, mu_v, prec_m, chol=False, log_form=False):
     else:
         return exp(p1+p2+p3)
 
+def multivariate_Gaussian_likelihood(SS_dict, prec_m, chol=0, log_form = 0):
+    '''Likelihood function for a Gaussian multivariate probability model computed
+    from cached sufficient statistic. Possible to use the cholesky decomposition to speed
+     the calculation of the determinant (At the cost of one extra dot product).
+     
+     Parameters
+     --------
+     SS_dict: python-dict
+     Cached sufficient statistic for the likelihood model. Is retrieved as an output from the function
+     'store_sufficient_statistics_mvGaussian';  'n' = P_k+n,  'E_mu=[(P_k*mu_0)+(n*mu)]/[P_k+n], 
+     S_m=scatter matrix
+     
+     prec_m: array-like
+     dXd precision matrix. matrix must be symmetric positive definite and is the inverse of
+    the covariance matrix. prec_m = inv(cov_matrix). If the cholesky parametrization is
+    selected, this parameter must be the lower triangular decomposition of the precision
+    matrix, L. prec_matrix = LL
     
+    output
+    --------
+    scalar. total likelihood of your data'
+     '''
+     
+    
+    if chol:
+        det =   chol_log_determinant(prec_m) 
+        trace = np.einsum('ij,ji', prec_m.dot(prec_m.T), SS_dict['S_m'])
+    else:
+        det  = np.linalg.slogdet(prec_m)[1]
+        trace = np.einsum('ij,ji', prec_m, SS_dict['S_m'])
+    
+    d = len(SS_dict['S_m'])
+    n = SS_dict['n']
+    p1 = -0.5*n*d*math.log(2*math.pi)
+    p2 = 0.5*n*det
+    p3 = -0.5*trace
+    if log_form:
+        return p1+p2+p3
+    else:
+        return math.exp(p1+p2+p3)
