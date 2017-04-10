@@ -6,15 +6,13 @@ import useful_functions as uf
 
 def posterior_estimate(data_set, mu, sigma_2):
     '''sum the log-likelihood of each data point under a Gaussian pdf'''
+    return uf.Gaussian_pdf(x=data_set, mu=mu, precision = 1./sigma_2, log_form = 1) 
     
-    e = [uf.Gaussian_pdf(x=1, mu=mu, precision = 1./sigma_2, log_form = 1) for i in data_set] #notice the the function uses the precision
-    return sum(e)
-
-
 def make_param_dict(k_0, v_0, mu_0, sigma_2_0):
     '''make a dictionary with the prior parameters for Gibbs sampling.
     updatated parameters are the 'up_...' entries of the dictionary,
     they will begin with the same value as the priors'''
+    
     return {'prior_k_0':k_0, 'prior_v_0':v_0, 'prior_mu_0':mu_0, 'prior_sigma_2_0':sigma_2_0, 'up_k_0':k_0, 'up_v_0':v_0, 'up_mu_0':mu_0, 'up_sigma_2_0':sigma_2_0}
 
 
@@ -48,7 +46,7 @@ def update_parameters(param_dict, data_set):
     
     
 def draw_sigma_2(param_dict):
-    '''draw the variace from the updated prior params'''
+    '''draw the variance from the updated prior params'''
     inv_sigma_2 = np.random.gamma(shape=param_dict['up_v_0']/2., scale=2./param_dict['up_sigma_2_0']) #faster than scipy
     return 1./inv_sigma_2 #this is used to draw the posterior and transformed to draw the mean
 
