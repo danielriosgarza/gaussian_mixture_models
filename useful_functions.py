@@ -298,7 +298,42 @@ def wishart_pdf(X, S, v, d, chol=False, log_form = False):
     else:
         return math.exp(p1+p2+p3+p4+p5)
     
+def Wishart_rvs(df, S, chol=0):
+    '''generate random Wishart distributed variables, with possibility of using the cholesky decomposition.
+    same result as sts.wishart(df=df, scale=S).rvs() with a gain of speed, particularly for large matrices. 
+    Parameter
+    -------
+    df: integer
+    degrees of freedom, assumed to be greated than the dimensions.
+    S: array-like
+    Positive definite scaling matrix. If chol, this matrix is assumed to be the lower triangular Cholesky 
+    decomposition of S, L. such that S = LL'.
     
+    Output
+    --------
+    A Wisart distributed positive definite random matrix. I chol=1, the function returns the lower triangular
+    Cholesky factor of this matrix.'''
+    
+    d = S.shape[0] #dimensions
+    ind = np.tril_indices(d,-1) #lower triangular non-diagonal elements
+    B = np.zeros((d,d)) 
+    norm = np.random.standard_normal(len(ind[0])) #normal samples for the lower triangular non-diagonal elements
+    B[ind] = norm 
+    chisq = [sqrt(np.random.chisquare(df = df-i+1)) for i in xrange(d)]
+    B = B+diag(chisq)
+    
+    if chol:
+        ch_d =trm(alpha=1, a=S, b=B, lower=1)
+        #ch_d = S.dot(B)
+        dg= diag(ch_d)
+        adj = np.tile(dg/abs(dg), (d,1))
+        return ch_d*adj
+    else:
+        ch = linalg.cholesky(S, lower=1, check_finite=0)
+        m = trm(alpha=1, a=ch, b=B, lower=1)
+        return m.dot(m.T) 
+    
+            
 def invwishart_pdf(X, S, v, d, chol=False, log_form = False):
     '''Inverse Wishart probability density with possible use of the cholesky decomposition of S and X.
     Returns the output that is comparable to scipy.stats.invwishart(df=v, scale=S).pdf(X). 
@@ -446,3 +481,12 @@ def multivariate_Gaussian_likelihood(SS_dict, prec_m, chol=0, log_form = 0):
         return p1+p2+p3
     else:
         return math.exp(p1+p2+p3)
+
+def multivariate_Gaussian_rvs(mu, Chol_prec_m):
+    d = len(Chol_prec_m)
+    #A = Chol_prec_m.dot(Chol_prec_m.T)
+    #iA = np.linalg.inv(A)
+    #cA = np.linalg.cholesky(iA)
+    Z = np.random.standard_normal(size=d)
+    V = linalg.solve_triangular(Chol_prec_m, Z, lower=1, overwrite_b=1, check_finite=0)
+    return mu +V# cA.dot(Z)
