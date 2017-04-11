@@ -554,7 +554,7 @@ def multivariate_Gaussian_rvs(mu, prec_m, chol=False):
     It has a slightly different output than numpy or scipy
     multivariate normal rvs, but has similar statistical properties.
     The algorithm is mentioned in the book 'Handbook of Monte Carlo Methods'
-    from Kroese et al.(2011) (algorithm 5.2, pag. 155'''
+    from Kroese et al.(2011) (algorithm 5.2, pag. 155)'''
     
     d = len(prec_m)
     Z = np.random.standard_normal(size=d)
