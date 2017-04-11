@@ -1,4 +1,5 @@
 from __future__ import division
+
 from pylab import *
 import numpy as np
 import scipy.stats as sts
@@ -6,6 +7,7 @@ import math
 import scipy.special as spe
 import scipy.linalg.lapack as lpack
 import scipy.linalg as linalg
+from IPython.display import display, Math, Latex
 #%alias_magic t timeit
 trm = linalg.get_blas_funcs('trmm') #multiply triangular matrices. If lower use lower=1.
 
@@ -52,7 +54,8 @@ def scatter_matrix(X, E_mu = False, P_mu=None, P_k=1):
 
 def store_sufficient_statistics_mvGaussian(X, P_mu=None, P_k=1):
     '''stores sufficient statistics to evaluate the likelihood of a dataset under a Gaussian
-    multivariate probability model. Is to be used with the function 'multivariate_Gaussian_likelihood'.
+    multivariate probability model. Can be used with the function 'multivariate_Gaussian_likelihood'
+    or other similar functions.
     It can handle a prior mean and 'pseudo-counts' , and thus store the sufficient statistics of a seperate
     subset of data. For detailes see Thomas Minka(1998, sec. 7).
     
@@ -188,15 +191,7 @@ def gamma_pdf(x, alpha, theta, log_form=False):
 
 
 
-def Gaussian_pdf(x, mu, precision, log_form = False):
-    delta = (x-mu)**2
-    t1 = math.log(0.5*(precision/math.pi))
-    t2 = -precision*delta
-    
-    if log_form:
-        return 0.5*(t1+t2)
-    else:
-        return math.exp(0.5*(t1+t2))
+
     
 def estimate_convergence(data_set, simulation_set):
     '''convergence estimator for scalar quantities,
@@ -311,8 +306,9 @@ def Wishart_rvs(df, S, chol=0):
     
     Output
     --------
-    A Wisart distributed positive definite random matrix. I chol=1, the function returns the lower triangular
-    Cholesky factor of this matrix.'''
+    A Wisart distributed positive definite random matrix. If one a assumes that the scale matrix S is a covariance matrix, 
+    then the function returns a random Wishart matrix, W,  where W is a random precision matrix 
+    and if chol is selected, the function returns the cholesky decomposition of W'''
     
     d = S.shape[0] #dimensions
     ind = np.tril_indices(d,-1) #lower triangular non-diagonal elements
@@ -391,7 +387,74 @@ def invwishart_pdf(X, S, v, d, chol=False, log_form = False):
         return p1+p2+p3+p4+p5
     else:
         return math.exp(p1+p2+p3+p4+p5)
- 
+
+def Gaussian_pdf(x, mu, precision, log_form = False):
+    '''Univariate Gaussian probability density function. Parametrized by the precision.
+    t = r'if  $x \sim \mathcal{N}(\mu, \lambda^{2})$ then $f(x)=\frac{\lambda}{\sqrt{2 \pi }}'
+    t+=r'exp(- \frac{\lambda^2}{2 }(x-\mu)^2)$'
+    text(0.1, 0.5,t)
+    
+    Returns the same result as scipy.stats.normal(loc=mu, scale=sqrt(1./precision)).pdf(x)
+    Parameters
+    --------
+    x: float-like
+    scalar for which the probability is to be estimated.
+    mu: float-like
+    scalar representing the mean or center of the distribution
+    precision: float-like
+    scalar representing the precision of the inverse of the variance
+    log_form: Bolean
+    
+    Output
+    --------
+    If log_form is selected, returns the log of the probability density 
+    evaluated at x, the density is returned otherwise.''' 
+
+    delta = (x-mu)**2
+    t1 = 0.5*math.log(precision)
+    t2= -0.5*math.log(2*math.pi)
+    t3 = -0.5*precision*delta
+    
+    if log_form:
+        return t1+t2+t3
+    else:
+        return math.exp(t1+t2+t3) 
+
+def Gaussian_likelihood(x_vec, mu, precision, log_form=False):
+    '''return the likelihood of a set of scalar-valued samples, assumed to be iid univariate Gaussian.
+     This function is parametrized by the precision matrix. See Gaussian_pdf for the relavant
+     mathematical formula.
+     
+     Parameters
+     ---------
+     x_vec: array-like
+     one dimensional array of n 'observed' data-points for which the likelihood is to be estimated.
+     mu: float-like
+     scalar representing the mean or center of the distribution
+     precision: float-like
+     scalar representing the precision of the inverse of the variance
+     log_form: Bolean
+    
+     Output
+     --------
+     Joint likelihood of data-points in x_vec. If log_form, then the sum of loglikelihoods, else the product of 
+     likelihoods.'''
+    n = len(x_vec)
+    x = np.array(x_vec)
+    delta = (x-mu)**2
+    s_delta = sum(delta)
+    
+    p1 = 0.5*n*math.log(precision)
+    p2 = -0.5*n*math.log(2*math.pi)
+    p3 = -0.5*precision*s_delta
+    
+    if log_form:
+        return p1+p2+p3
+    
+    else:
+        return math.exp(p1+p2+p3)
+        
+        
 def multivariate_Gaussian_pdf(X, mu_v, prec_m, chol=False, log_form=False):
     '''Multivariate normal probability function with possibility of using the cholesky decomposition
     of the precision matrix. The function is paraterized by the precision instead of the covariance matrix.
@@ -482,11 +545,13 @@ def multivariate_Gaussian_likelihood(SS_dict, prec_m, chol=0, log_form = 0):
     else:
         return math.exp(p1+p2+p3)
 
-def multivariate_Gaussian_rvs(mu, Chol_prec_m):
-    d = len(Chol_prec_m)
-    #A = Chol_prec_m.dot(Chol_prec_m.T)
-    #iA = np.linalg.inv(A)
-    #cA = np.linalg.cholesky(iA)
+def multivariate_Gaussian_rvs(mu, prec_m, chol=False):
+    d = len(prec_m)
     Z = np.random.standard_normal(size=d)
-    V = linalg.solve_triangular(Chol_prec_m, Z, lower=1, overwrite_b=1, check_finite=0)
-    return mu +V# cA.dot(Z)
+    if chol:
+        V = linalg.solve_triangular(prec_m, Z, lower=1, overwrite_b=1, check_finite=0)
+        
+    else:
+        cp_m = np.linalg.cholesky(prec_m)
+        V = linalg.solve_triangular(cp_m, Z, lower=1, overwrite_b=1, check_finite=0)
+    return mu +V
