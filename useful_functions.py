@@ -546,6 +546,16 @@ def multivariate_Gaussian_likelihood(SS_dict, prec_m, chol=0, log_form = 0):
         return math.exp(p1+p2+p3)
 
 def multivariate_Gaussian_rvs(mu, prec_m, chol=False):
+    '''returns the a random multivariate Gaussian variable 
+    from a mean and precision matrix and possibly a Cholesky decomposition 
+    of the precision matrix.
+    To be used in Normal-Wishart sampler or similar approaches
+    where only the precision matrix is available, avoiding matrix inversions.
+    It has a slightly different output than numpy or scipy
+    multivariate normal rvs, but has similar statistical properties.
+    The algorithm is mentioned in the book 'Handbook of Monte Carlo Methods'
+    from Kroese et al.(2011) (algorithm 5.2, pag. 155'''
+    
     d = len(prec_m)
     Z = np.random.standard_normal(size=d)
     if chol:
