@@ -11,6 +11,17 @@ from IPython.display import display, Math, Latex
 #%alias_magic t timeit
 trm = linalg.get_blas_funcs('trmm') #multiply triangular matrices. If lower use lower=1.
 
+
+def fancy_inversion(A):
+    d = len(A)
+    m = np.fliplr(np.flipud(A))
+    c = np.linalg.cholesky(m)
+    inv_c = linalg.solve_triangular(c, np.eye(d), lower=1)
+    n = np.fliplr(np.flipud(inv_c))
+    return trm(alpha=1, a=n.T, b=n,lower=1)
+
+
+
 def scatter_matrix(X, E_mu = False, P_mu=None, P_k=1):
     '''get the scatter matrix of multidimensional data.
     with possibility of returning the empirical mean, since it's one of the steps in the
@@ -321,7 +332,7 @@ def Wishart_rvs(df, S, chol=0):
     if chol:
         ch_d =trm(alpha=1, a=S, b=B, lower=1)
         #ch_d = S.dot(B)
-        dg= diag(ch_d)
+        dg= diag(ch_d)#Assuring the result is the Cholesky decomposition that contains positive diagonals
         adj = np.tile(dg/abs(dg), (d,1))
         return ch_d*adj
     else:
