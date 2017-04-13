@@ -36,8 +36,8 @@ def update_param_dict(X, param_dict, chol=False):
     Parameters
     --------
     X: array-like
-    Vector of observations assumed to be iid mvGaussian. len(X) should return the number of observations, and len(X[0]) 
-    the dimensionallity. (shape = (n, d)). 
+    Vector of observations assumed to be iid mvGaussian. len(X) should return the number of observations,
+    and len(X[0]) the dimensionallity. (shape = (n, d)). 
     param_dict: python-dict
     dictionary created by the function 'make_param_dict' with the relevant prior values.
     
@@ -46,6 +46,7 @@ def update_param_dict(X, param_dict, chol=False):
     updates the 'up_...' entries of the param_dict and if chol, returns the Cholesky decomposition
     of the covariance matrix.'''
     
+    #obtain sufficient statistics
     SS = uf.store_sufficient_statistics_mvGaussian(X)
     k_n = param_dict['k_0']+SS['n']
     v_n = param_dict['v_0']+SS['n']
@@ -56,10 +57,16 @@ def update_param_dict(X, param_dict, chol=False):
 
     mu_n = ((param_dict['k_0']*param_dict['mu_0'])+(k_n*SS['E_mu']))/k_n
     Sigma_n = param_dict['Sigma_0'] + SS['S_m'] + ((param_dict['k_0']*SS['n'])/k_n)*mu_prec
-    Prec_n = np.linalg.inv(Sigma_n)
+    
+    #invert the precision matrix and take the Cholesky decomposition 
     if chol:
-        chky_Sigma = np.linalg.cholesky(Prec_n)
+        chky_Sigma, Prec_n = uf.inv_and_chol(Sigma_n, chol_of_inv=1)
         param_dict['chky_Sigma'] = chky_Sigma
+    else:
+        Prec_n =np.linalg.inv(Sigma_n)
+    
+    #update the parameters
+    
     param_dict['up_k_0']= k_n
     param_dict['up_v_0']= v_n
     param_dict['up_mu_0']= mu_n
@@ -70,8 +77,8 @@ def update_param_dict(X, param_dict, chol=False):
 def Gibbs_sample(param_dict, chol=False):
     
     if chol:
-        Chol_prec_m = uf.Wishart_rvs(param_dict['up_v_0'], param_dict['chky_Sigma'], chol=1)
-        mu = uf.multivariate_Gaussian_rvs(param_dict['up_mu_0'], (param_dict['up_k_0'])*Chol_prec_m, chol=1)
+        Chol_prec_m = uf.Wishart_rvs(param_dict['up_v_0'], S = param_dict['chky_Sigma'], chol=1)
+        mu = uf.multivariate_Gaussian_rvs(param_dict['up_mu_0'], sqrt((param_dict['up_k_0']))*Chol_prec_m, chol=1)
         return uf.multivariate_Gaussian_rvs(mu, Chol_prec_m, chol=1)
     else:
         
@@ -84,15 +91,26 @@ def Gibbs_sample(param_dict, chol=False):
     #    return sts.multivariate_normal(mean=mu, cov=prec_m).rvs()
 
 
-def Gibbs_sampler(param_dict, t, chol=1):
-    if chol:
+def Gibbs_sample_slow_scipy_version(param_dict):
+    covm_m = sts.wishart(df = param_dict['up_v_0'], scale=param_dict['up_Prec_0']).rvs()
+    Sigma_m = np.linalg.inv(covm_m)
+    mu = sts.multivariate_normal(mean= param_dict['up_mu_0'], cov=(1./param_dict['up_k_0'])*Sigma_m).rvs()
+    return sts.multivariate_normal(mean=mu, cov = Sigma_m).rvs()
+
+
+def Gibbs_sampler(param_dict, t, v='chol'):
+    if v=='chol':
         s_dict = {i: Gibbs_sample(param_dict, chol=1) for i in xrange(t)}
-    else:
+    elif v=='full':
         s_dict = {i: Gibbs_sample(param_dict, chol=0) for i in xrange(t)}        
+    elif v=='slow':
+        s_dict = {i: Gibbs_sample_slow_scipy_version(param_dict) for i in xrange(t)}
     return s_dict
 
-d = 200
-n=500
+
+
+d = 20
+n=5000
 A = np.random.rand(d,d)
 A = A.dot(A.T)
 mu = np.random.uniform(0,1000,d)
@@ -106,8 +124,20 @@ param_dict = make_param_dict(k_0=1, v_0=1, mu_0=np.zeros(d), Sigma_0=np.eye(d),d
 
 update_param_dict(X, param_dict, chol=1)
 
-np.random.seed(666)
-s_dict = Gibbs_sampler(param_dict, 500, chol=1)
+import time
+
+t= time.time()
 
 np.random.seed(666)
-s2_dict = Gibbs_sampler(param_dict, 500, chol=0)
+s_dict = Gibbs_sampler(param_dict, 500, v = 'chol')
+
+print time.time() -t
+
+np.random.seed(666)
+#s2_dict = Gibbs_sampler(param_dict, 5000, chol=0)
+
+t = time.time()
+
+s3_dict = Gibbs_sampler(param_dict, 500, v='slow')
+
+print time.time()-t
