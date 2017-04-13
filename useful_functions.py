@@ -15,12 +15,16 @@ trm = linalg.get_blas_funcs('trmm') #multiply triangular matrices. If lower use 
 def fancy_inversion(A):
     d = len(A)
     m = np.fliplr(np.flipud(A))
-    c = np.linalg.cholesky(m)
-    inv_c = linalg.solve_triangular(c, np.eye(d), lower=1)
+    c =  linalg.cholesky(m, lower=1, check_finite=0,overwrite_a=1)
+    inv_c = linalg.solve_triangular(c, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0)
     n = np.fliplr(np.flipud(inv_c))
     return trm(alpha=1, a=n.T, b=n,lower=1)
 
-
+def inv_and_chol(A):
+    c =  linalg.cholesky(A, lower=1, check_finite=0,overwrite_a=1)
+    d = len(A)
+    icholA = linalg.solve_triangular(c, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0)
+    return c, trm(alpha=1, a=icholA.T, b=icholA,lower=0)
 
 def scatter_matrix(X, E_mu = False, P_mu=None, P_k=1):
     '''get the scatter matrix of multidimensional data.
