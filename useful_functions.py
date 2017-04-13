@@ -287,6 +287,16 @@ def estimate_convergence(data_set, simulation_set):
     return sqrt(var_mp/W)
 
 
+def retrieve_convergence_curves(i0, data_set, simulation_set):
+    x = [estimate_convergence(data_set, simulation_set[0:i]) for i in xrange(i0,len(simulation_set))]
+    return np.array(x)
+
+def plot_multivariate_convergence(s_dict, data_set, i0):
+    s = s_dict.values()
+    s = np.array(s)
+    for i in xrange(len(s.T)):
+        plot(retrieve_convergence_curves(i0, data_set.T[i], s.T[i]))
+    
 def chol_determinant(L):
     '''compute the determinant of a cholesky decomposition.
     if A = LL', the function returns det(A)'''
