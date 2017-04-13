@@ -8,6 +8,8 @@ import scipy.special as spe
 import scipy.linalg.lapack as lpack
 import scipy.linalg as linalg
 from IPython.display import display, Math, Latex
+
+np.set_printoptions(precision=5)
 #%alias_magic t timeit
 trm = linalg.get_blas_funcs('trmm') #multiply triangular matrices. If lower use lower=1.
 
@@ -20,11 +22,60 @@ def fancy_inversion(A):
     n = np.fliplr(np.flipud(inv_c))
     return trm(alpha=1, a=n.T, b=n,lower=1)
 
-def inv_and_chol(A):
-    c =  linalg.cholesky(A, lower=1, check_finite=0,overwrite_a=1)
+def inv_and_chol(A, chol_of_inv=False):
+    '''return the cholesky factorization and the inverse of matrix A.
+    Or the inverse and the Cholesky factorization of the inverse.
+    Has the same precision as np.linalg, with a possible slight gain of speed
+    
+    Parameters
+    ---------
+    A: array-like
+    square positive definite matrix
+    chol_of_inv: boolean
+    if true returns the Cholesky factorizatio on the inverse of A.
+    
+    Output
+    -------
+    the Cholesky factorization L of A. LL'=A. and the matrix inverse of A'''
+    
+    c =  linalg.cholesky(A, lower=1, check_finite=0,overwrite_a=1)#cholesky factorization
     d = len(A)
-    icholA = linalg.solve_triangular(c, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0)
-    return c, trm(alpha=1, a=icholA.T, b=icholA,lower=0)
+    if chol_of_inv:
+        choliA = chol_of_the_inverse(c)
+        return choliA, trm(alpha=1, a=choliA, b=choliA.T,lower=1)
+    else:
+            icholA = linalg.solve_triangular(c, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0) #solve for the inverse
+            return c, trm(alpha=1, a=icholA.T, b=icholA,lower=0)
+
+
+
+def chol_of_the_inverse(cholA):
+    '''Take a Cholesky of matrix A and return the Cholesky
+    decomposition of the inverse of A. The algorithm is based on the antidiagonal 
+    matrix J and on the folowing equality:
+        If JAJ = LL', then the Cholesky decomposition of 
+        inv(A) is given by (J(inv(L))J)'. While inv(L) is related
+        to the Cholesly decomposition of A (and not on JAJ), k by:
+            inv(L) =inv(Jkk'J). Notice the JA = flipupdown(A) and
+            AJ = flipleftright(A). 
+    The output is the same as np.linalg.choleske(np.linealg.inv(cholA.dot(cholA.T))).
+
+    Paramerter
+    --------
+    chlA: array-like
+    lower triangular Cholesky decomposition of a matrix
+    
+    Output
+    --------
+    Lower triangular Choloesky decomposition of the inverse of matrix A'''
+    
+    d = len(cholA)
+    p1 = np.flipud(cholA)
+    p2 = np.fliplr(cholA.T)
+    p3 = p1.dot(p2)
+    p4 = linalg.cholesky(p3, lower=1, check_finite=0,overwrite_a=1)  
+    p5 = linalg.solve_triangular(p4, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0)
+    return np.fliplr(np.flipud(p5)).T
 
 def scatter_matrix(X, E_mu = False, P_mu=None, P_k=1):
     '''get the scatter matrix of multidimensional data.
