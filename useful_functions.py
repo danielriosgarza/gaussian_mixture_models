@@ -382,7 +382,7 @@ def Wishart_rvs(df, S, chol=0):
     
     Output
     --------
-    A Wisart distributed positive definite random matrix. If one a assumes that the scale matrix S is a covariance matrix, 
+    A Wishart distributed positive definite random matrix. If one a assumes that the scale matrix S is a covariance matrix, 
     then the function returns a random Wishart matrix, W,  where W is a random precision matrix 
     and if chol is selected, the function returns the cholesky decomposition of W'''
     
