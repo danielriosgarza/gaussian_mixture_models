@@ -8,8 +8,10 @@ import scipy.special as spe
 import scipy.linalg.lapack as lpack
 import scipy.linalg as linalg
 from IPython.display import display, Math, Latex
+import random
 
-np.set_printoptions(precision=5)
+
+#np.set_printoptions(precision=5)
 #%alias_magic t timeit
 trm = linalg.get_blas_funcs('trmm') #multiply triangular matrices. If lower use lower=1.
 
@@ -22,7 +24,7 @@ def fancy_inversion(A):
     n = np.fliplr(np.flipud(inv_c))
     return trm(alpha=1, a=n.T, b=n,lower=1)
 
-def inv_and_chol(A, chol_of_inv=False):
+def inv_and_chol(A, chol_of_A = False, chol_of_invA=False):
     '''return the cholesky factorization and the inverse of matrix A.
     Or the inverse and the Cholesky factorization of the inverse.
     Has the same precision as np.linalg, with a possible slight gain of speed
@@ -31,21 +33,39 @@ def inv_and_chol(A, chol_of_inv=False):
     ---------
     A: array-like
     square positive definite matrix
-    chol_of_inv: boolean
-    if true returns the Cholesky factorizatio on the inverse of A.
     
+    chol_of_A: boolean
+    if the Cholesky decomposition of A should be returned.
+    
+    chol_of_invA: boolean
+    if the Cholesky decomposition of the inverse of A should be returned.
+
     Output
     -------
-    the Cholesky factorization L of A. LL'=A. and the matrix inverse of A'''
+    
+    if chol_of_A=0 and chol_of_invA=1, returns only the inverse of A.
+    if chol_of_A=1 and chol_of_invA=0 returns (1)Lower Cholesky dec of A, (2) inverse of A
+    if chol_of_A=0 and chol_of_invA=1 returns (1)Lower Cholesky dec of inverse of A, (2) inverse of A
+    if chol_of_A=1 and chol_of_invA=1 returns (1)Lower Cholesky dec of A, (2) Lower Cholesky dec of inverse of A
+    (3)inverse of A'''
     
     c =  linalg.cholesky(A, lower=1, check_finite=0,overwrite_a=1)#cholesky factorization
     d = len(A)
-    if chol_of_inv:
+    if chol_of_invA and not chol_of_A:
         choliA = chol_of_the_inverse(c)
         return choliA, trm(alpha=1, a=choliA, b=choliA.T,lower=1)
+
+    elif chol_of_A and not chol_of_invA:
+        icholA = linalg.solve_triangular(c, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0) #solve for the inverse
+        return c, trm(alpha=1, a=icholA.T, b=icholA,lower=0)
+         
+    elif chol_of_A and chol_of_invA:
+        choliA = chol_of_the_inverse(c)
+        return c, choliA, trm(alpha=1, a=choliA, b=choliA.T,lower=1)    
+    
     else:
-            icholA = linalg.solve_triangular(c, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0) #solve for the inverse
-            return c, trm(alpha=1, a=icholA.T, b=icholA,lower=0)
+        icholA = linalg.solve_triangular(c, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0) #solve for the inverse
+        return trm(alpha=1, a=icholA.T, b=icholA,lower=0)
 
 
 
@@ -159,6 +179,7 @@ def store_sufficient_statistics_mvGaussian(X, P_mu=None, P_k=1):
 def multivariate_t_rvs_chol(mu, L, df, n=1):
     '''generate a random variable from multivariate t ditribution inputing directly the
     Cholesky decomposition of the covariace matrix.
+    
     Parameters
     ----------
     mu : array_like
@@ -262,7 +283,21 @@ def gamma_pdf(x, alpha, theta, log_form=False):
 def estimate_convergence(data_set, simulation_set):
     '''convergence estimator for scalar quantities,
     based on the within and between variances of
-    data and simulated sets'''
+    data and simulated sets
+
+    Parameters
+    --------
+    
+    data_set: array-like
+    scalar quantity of measured data
+    
+    simulation: array-like
+    simulation of the data-set by some Monte Carlo sampling algorithm
+    
+    Output
+    --------
+    score measuring the Between and within vairiance.
+    If comparable should be close to one'''
     #constants
     d_n = len(data_set)
     s_n  = len(simulation_set)
@@ -288,10 +323,28 @@ def estimate_convergence(data_set, simulation_set):
 
 
 def retrieve_convergence_curves(i0, data_set, simulation_set):
+    '''retrieve a curve with convergence estimate of for t simulation points.
+    
+    Parameters
+    --------
+    i0: int or float
+    initial cutoff to begin evaluating convergence from 0-i0.
+
+    data_set: array-like
+    scalar quantity of measured data
+    
+    simulation: array-like
+    simulation of the data-set by some Monte Carlo sampling algorithm
+    
+    Output
+    --------
+    x-points for the course of the convergence in time points of the simulation.'''
+    
     x = [estimate_convergence(data_set, simulation_set[0:i]) for i in xrange(i0,len(simulation_set))]
     return np.array(x)
 
 def plot_multivariate_convergence(s_dict, data_set, i0):
+    '''plot convergence curves for multivariate data'''
     s = s_dict.values()
     s = np.array(s)
     for i in xrange(len(s.T)):
@@ -391,7 +444,7 @@ def Wishart_rvs(df, S, chol=0):
     B = np.zeros((d,d)) 
     norm = np.random.standard_normal(len(ind[0])) #normal samples for the lower triangular non-diagonal elements
     B[ind] = norm 
-    chisq = [sqrt(np.random.chisquare(df = df-i+1)) for i in xrange(d)]
+    chisq = [math.sqrt(np.random.chisquare(df=df-(i+1)+1)) for i in xrange(d)]
     B = B+diag(chisq)
     
     if chol:
@@ -592,7 +645,7 @@ def multivariate_Gaussian_likelihood(SS_dict, prec_m, chol=0, log_form = 0):
      'store_sufficient_statistics_mvGaussian';  'n' = P_k+n,  'E_mu=[(P_k*mu_0)+(n*mu)]/[P_k+n], 
      S_m=scatter matrix
      
-     prec_m: array-like
+     prec_m: array-likeprec_m = uf.Wishart_rvs(df=param_dict['up_v_0'], S=param_dict['up_Prec_0'])
      dXd precision matrix. matrix must be symmetric positive definite and is the inverse of
     the covariance matrix. prec_m = inv(cov_matrix). If the cholesky parametrization is
     selected, this parameter must be the lower triangular decomposition of the precision
