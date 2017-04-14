@@ -60,8 +60,8 @@ def update_param_dict(X, param_dict, chol=False):
     
     #invert the precision matrix and take the Cholesky decomposition 
     if chol:
-        chky_Sigma, Prec_n = uf.inv_and_chol(Sigma_n, chol_of_inv=1)
-        param_dict['chky_Sigma'] = chky_Sigma
+        chol_Sigma, chol_Prec, Prec_n = uf.inv_and_chol(Sigma_n, chol_of_A = 1, chol_of_invA=1)
+        
     else:
         Prec_n =np.linalg.inv(Sigma_n)
     
@@ -72,12 +72,16 @@ def update_param_dict(X, param_dict, chol=False):
     param_dict['up_mu_0']= mu_n
     param_dict['up_Sigma_0']= Sigma_n
     param_dict['up_Prec_0'] = Prec_n
+    param_dict['chol_Sigma'] = chol_Sigma
+    param_dict['chol_Prec'] = chol_Prec
+    param_dict['d'] = len(mu_n)
+    param_dict['n'] = SS['n']
 
 
 def Gibbs_sample(param_dict, chol=False):
     
     if chol:
-        Chol_prec_m = uf.Wishart_rvs(param_dict['up_v_0'], S = param_dict['chky_Sigma'], chol=1)
+        Chol_prec_m = uf.Wishart_rvs(param_dict['up_v_0'], S = param_dict['chol_Prec'], chol=1)
         mu = uf.multivariate_Gaussian_rvs(param_dict['up_mu_0'], sqrt((param_dict['up_k_0']))*Chol_prec_m, chol=1)
         return uf.multivariate_Gaussian_rvs(mu, Chol_prec_m, chol=1)
     else:
@@ -91,11 +95,21 @@ def Gibbs_sample(param_dict, chol=False):
     #    return sts.multivariate_normal(mean=mu, cov=prec_m).rvs()
 
 
+
 def Gibbs_sample_slow_scipy_version(param_dict):
-    covm_m = sts.wishart(df = param_dict['up_v_0'], scale=param_dict['up_Prec_0']).rvs()
-    Sigma_m = np.linalg.inv(covm_m)
+    Prec_m = sts.wishart(df = param_dict['up_v_0'], scale=param_dict['up_Prec_0']).rvs()
+    Sigma_m = np.linalg.inv(Prec_m)
     mu = sts.multivariate_normal(mean= param_dict['up_mu_0'], cov=(1./param_dict['up_k_0'])*Sigma_m).rvs()
     return sts.multivariate_normal(mean=mu, cov = Sigma_m).rvs()
+
+
+def collapsed_Gibbs_sampler(t, param_dict, chol=False):
+    df = param_dict['up_v_0']-param_dict['d']+1.
+    var_mul = (param_dict['up_k_0']+1.)/(param_dict['up_k_0']*df)
+    if chol:
+        return uf.multivariate_t_rvs_chol(param_dict['up_mu_0'], sqrt(var_mul)*param_dict['chol_Sigma'], df, n=t)
+    else:
+        return uf.multivariate_t_rvs(param_dict['up_mu_0'], var_mul*param_dict['up_Sigma_0'], df=df, n=t)
 
 
 def Gibbs_sampler(param_dict, t, v='chol'):
@@ -105,12 +119,18 @@ def Gibbs_sampler(param_dict, t, v='chol'):
         s_dict = {i: Gibbs_sample(param_dict, chol=0) for i in xrange(t)}        
     elif v=='slow':
         s_dict = {i: Gibbs_sample_slow_scipy_version(param_dict) for i in xrange(t)}
-    return s_dict
+    elif v=='coll_chol':
+        s = collapsed_Gibbs_sampler(t,param_dict, chol=1)
+        s_dict={i:s[i] for i in xrange(t)}
+    elif v=='coll':
+        s = collapsed_Gibbs_sampler(t,param_dict, chol=0)
+        s_dict={i:s[i] for i in xrange(t)}
+    return np.array([s_dict[i] for i in xrange(t)])
 
 
 
 d = 20
-n=5000
+n=500
 A = np.random.rand(d,d)
 A = A.dot(A.T)
 mu = np.random.uniform(0,1000,d)
@@ -128,16 +148,21 @@ import time
 
 t= time.time()
 
-np.random.seed(666)
-s_dict = Gibbs_sampler(param_dict, 500, v = 'chol')
+
+s1 = Gibbs_sampler(param_dict, 500, v = 'coll')
+
+
+s2 = Gibbs_sampler(param_dict, 500, v = 'coll_chol')
+
+s3 = Gibbs_sampler(param_dict, 500, v = 'chol')
 
 print time.time() -t
 
-np.random.seed(666)
+#np.random.seed(666)
 #s2_dict = Gibbs_sampler(param_dict, 5000, chol=0)
 
-t = time.time()
+#t = time.time()
 
-s3_dict = Gibbs_sampler(param_dict, 500, v='slow')
+#s3_dict = Gibbs_sampler(param_dict, 500, v='slow')
 
-print time.time()-t
+#print time.time()-t
