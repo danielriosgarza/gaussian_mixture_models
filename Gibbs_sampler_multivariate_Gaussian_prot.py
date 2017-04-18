@@ -199,7 +199,7 @@ def collapsed_Gibbs_sampler(t, param_dict, chol=False, non_inf=False):
         
     elif chol and not non_inf: #sample from an informative prior using the Cholesky decomposition
         df = param_dict['up_v_0']-param_dict['d']+1.
-        var_coeff = math.sqrt(param_dict['up_k_0']+1.)/(param_dict['up_k_0']*df)
+        var_coeff = math.sqrt((param_dict['up_k_0']+1.)/(param_dict['up_k_0']*df))
         return uf.multivariate_t_rvs_chol(mu=param_dict['up_mu_0'], L= var_coeff*param_dict['chol_Sigma'], df=df, n=t)
     
     elif non_inf and not chol: #sample from a non-informative prior
@@ -269,7 +269,7 @@ def Gibbs_sampler(param_dict, t, v='chol'):
         s = collapsed_Gibbs_sampler(t=t, param_dict=param_dict, chol=1, non_inf=1)
         s_dict={i:s[i] for i in xrange(t)}
 
-    return s_dict, np.array([s_dict[i] for i in xrange(t)])
+    return np.array([s_dict[i] for i in xrange(t)]), s_dict
 
 
 
@@ -299,7 +299,7 @@ t= time.time()
 
 
 
-draws=5000
+draws=50000
 
 s1, s_d1 = Gibbs_sampler(param_dict, draws, v = 'full')
 s2, s_d2 = Gibbs_sampler(param_dict, draws, v = 'nonInfFull')
@@ -321,14 +321,33 @@ print time.time() -t
 
 
 for i in xrange(len(X.T)):
-    print var(s1.T[i]), '\t', var(s2.T[i]), '\t', var(s3.T[i]), '\t', var(s4.T[i]), '\t', var(X.T[i])
+    print 'data', '\t', var(X.T[i]), '\n'
+    print 'noninffull', '\t', var(s2.T[i]), '\n'
+    print 'noninfchol', '\t', var(s4.T[i]), '\n'
+    print 'noninfslow', '\t', var(s6.T[i]), '\n'
+    print 'colpsednoninffull', '\t', var(s8.T[i]), '\n'
+    print 'colpsednoninfchol', '\t', var(s10.T[i]), '\n'
+    
+    print 'full', '\t', var(s1.T[i]), '\n'
+    print 'chol', '\t', var(s3.T[i]), '\n'
+    print 'slow', '\t', var(s5.T[i]), '\n'
+    print 'clpsedfull', '\t', var(s7.T[i]), '\n'
+    print 'clpsedchol', '\t', var(s9.T[i]), '\n'
 
-scatter(s2.T[0], s2.T[1], c='r', alpha=0.2);scatter(s3.T[0], s3.T[1], c='r', alpha=0.2); scatter(s1.T[0], s1.T[1], c='g', alpha=0.2);scatter(X.T[0], X.T[1])
-#np.random.seed(666)
-#s2_dict = Gibbs_sampler(param_dict, 5000, chol=0)
 
-#t = time.time()
 
-#s3_dict = Gibbs_sampler(param_dict, 500, v='slow')
 
-#print time.time()-t
+scatter(s1.T[0], s1.T[1], c='g', alpha=0.2)
+scatter(s3.T[0], s3.T[1], c='g', alpha=0.2)
+scatter(s5.T[0], s5.T[1], c='g', alpha=0.2)
+scatter(s7.T[0], s7.T[1], c='g', alpha=0.2)
+scatter(s9.T[0], s9.T[1], c='g', alpha=0.2)
+
+
+scatter(s2.T[0], s2.T[1], c='r', alpha=0.2)
+scatter(s4.T[0], s4.T[1], c='r', alpha=0.2)
+scatter(s6.T[0], s6.T[1], c='r', alpha=0.2)
+scatter(s8.T[0], s8.T[1], c='r', alpha=0.2)
+scatter(s10.T[0], s10.T[1], c='r', alpha=0.2)
+
+scatter(X.T[0], X.T[1], c='b',)
