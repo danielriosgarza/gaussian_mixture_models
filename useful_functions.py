@@ -444,7 +444,7 @@ def Wishart_rvs(df, S, chol=0):
     B = np.zeros((d,d)) 
     norm = np.random.standard_normal(len(ind[0])) #normal samples for the lower triangular non-diagonal elements
     B[ind] = norm 
-    chisq = [math.sqrt(np.random.chisquare(df=df-(i+1)+1)) for i in xrange(d)]
+    chisq = [math.sqrt(random.gammavariate(0.5*(df-(i+1)+1), 2.0)) for i in xrange(d)]
     B = B+diag(chisq)
     
     if chol:
@@ -686,11 +686,34 @@ def multivariate_Gaussian_rvs(mu, prec_m, chol=False):
     from Kroese et al.(2011) (algorithm 5.2, pag. 155)'''
     
     d = len(prec_m)
-    Z = np.random.standard_normal(size=d)
+    Z = np.random.standard_normal(size=(d,1))
     if chol:
-        V = linalg.solve_triangular(prec_m, Z, lower=1, overwrite_b=1, check_finite=0)
-        
+        V = linalg.solve_triangular(prec_m.T, Z, lower=0, overwrite_b=1, check_finite=0)
+       
     else:
         cp_m = np.linalg.cholesky(prec_m)
-        V = linalg.solve_triangular(cp_m, Z, lower=1, overwrite_b=1, check_finite=0)
-    return mu +V
+        V = linalg.solve_triangular(cp_m.T, Z, lower=0, overwrite_b=1, check_finite=0)
+        
+    return np.array(mu) + V.flatten()
+
+
+
+
+def mvg(mu, prec_m,a):
+    d=len(mu)
+    diag = np.diag(prec_m)
+    D_1 = np.diag(-1./diag)
+    D_1_2 = np.diag(sqrt(1./diag))
+    L = prec_m.copy()
+    L[np.tril_indices(d)]=0
+    s0 = np.random.standard_normal(size=(d,1))
+    s1 = np.random.standard_normal(size=(d,1))
+    for i in xrange(a):
+        z=np.random.standard_normal(size=(d,1))
+        p1 = D_1.dot(L).dot(s1)
+        p2 = D_1.dot(L.T).dot(s0)
+        p3 = D_1_2.dot(z)
+        s0=s1
+        s1 = p1+p2+p3
+    return s1.flatten() + mu
+
