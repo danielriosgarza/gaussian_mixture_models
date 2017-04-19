@@ -11,6 +11,8 @@ from IPython.display import display, Math, Latex
 import random
 
 #https://github.com/danielriosgarza/pychud
+#sudo apt-get install gfortran
+#python setup.py install
 try:
     import pychud
     pychud_im =True
@@ -263,9 +265,9 @@ def cholesky_r1_update(L, X, down=False, pychud_im=pychud_im):
     '''
     if pychud_im:
         if down:
-            return pychud.dchdd(L.T, X, overwrite_r=True)[0].T #if L is to be stored, set overwrite_r to False.
+            return pychud.dchdd(L.T, X, overwrite_r=False)[0].T #if L is to be stored, set overwrite_r to False.
         else:
-            pychud.dchud(L.T, X, overwrite_r=True).T
+            pychud.dchud(L.T, X, overwrite_r=False).T
     else:
         l = L.copy()
         x = X.copy()
@@ -665,7 +667,7 @@ def multivariate_Gaussian_pdf(X, mu_v, prec_m, chol=False, log_form=False):
     else:
         return exp(p1+p2+p3)
 
-def multivariate_Gaussian_likelihood(SS_dict, prec_m, chol=0, log_form = 0):
+def multivariate_Gaussian_likelihood_prec(SS_dict, prec_m, chol=0, log_form = 0):
     '''Likelihood function for a Gaussian multivariate probability model computed
     from cached sufficient statistic. Possible to use the cholesky decomposition to speed
      the calculation of the determinant (At the cost of one extra dot product).
@@ -705,6 +707,41 @@ def multivariate_Gaussian_likelihood(SS_dict, prec_m, chol=0, log_form = 0):
         return p1+p2+p3
     else:
         return math.exp(p1+p2+p3)
+
+
+
+def multivariate_Gaussian_likelihood_cov(SS_dict, log_form = 0):
+    '''Likelihood function for a Gaussian multivariate probability model computed
+    from cached sufficient statistic and the cholesky decomposition
+    of the covariance matrix. 
+     
+     Parameters
+     --------
+     SS_dict: python-dict
+     
+     cov_m: array-like
+     dXd covariance matrix. matrix must be symmetric positive definite. 
+         
+    output
+    --------
+    scalar. total likelihood of your data'
+     '''
+    prec_m = chol_of_the_inverse(SS_dict['cS_m']) 
+    
+    det =   chol_log_determinant(prec_m) 
+    trace = np.einsum('ij,ji', prec_m.dot(prec_m.T), SS_dict['S_m'])
+    
+    d = len(SS_dict['S_m'])
+    n = SS_dict['n']
+    p1 = -0.5*n*d*math.log(2*math.pi)
+    p2 = 0.5*n*det
+    p3 = -0.5*trace
+    if log_form:
+        return p1+p2+p3
+    else:
+        return math.exp(p1+p2+p3)
+
+
 
 def multivariate_Gaussian_rvs(mu, prec_m, chol=False):
     '''returns the a random multivariate Gaussian variable 
