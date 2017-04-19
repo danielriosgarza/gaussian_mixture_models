@@ -10,6 +10,12 @@ import scipy.linalg as linalg
 from IPython.display import display, Math, Latex
 import random
 
+#https://github.com/danielriosgarza/pychud
+try:
+    import pychud
+    pychud_im =True
+except ImportError:
+    pychud_im = False
 
 #np.set_printoptions(precision=5)
 #%alias_magic t timeit
@@ -237,27 +243,53 @@ def multivariate_t_rvs(mu, S, df=np.inf, n=1):
     z = np.random.multivariate_normal(np.zeros(d),S,(n,))
     return mu + z/np.sqrt(x)[:,None]   # same output format as random.multivariate_normal
 
-def cholesky_r1_update(L, X):
-    '''perform a rank 1 update of
-    the cholesky decomposition of positive definite
+def cholesky_r1_update(L, X, down=False, pychud_im=pychud_im):
+    '''perform a rank 1 update or downdate of the cholesky decomposition of a positive definite
     a matrix.
+    If available, can use the pychud package for optimal performance. Otherwise it will still compute
+    rank1 updates, bu using a double loop.
+    Parameters
+    --------
+    L :array-like
+    dxd lower triangular matrix, such that A = LL'.
+    X: array-like
+    d dimensional vector, such that A* = A + XX' or if down is selected A* = A - XX'
+    down: Boolean
+    If downgrade is desired.
     
-    L --> dxd lower triangular matrix, such that A = LL'
-    X---> d dimensional vector, such that A* = A + XX'
+     Output
+     --------
+     Lower triangular rank 1 up or downdated cholesky factorization of matrix A=LL'. 
     '''
-    
-    l = L.copy()
-    x = X.copy()
-    d = len(x)
-    for k in xrange(d):
-        r = math.sqrt((l[k,k]**2)+(x[k]**2))
-        c = r/l[k,k]
-        s = x[k]/l[k,k]
-        l[k,k] = r
-        for i in xrange(k+1, d):
-            l[i, k] = (l[i,k]+ (s*x[i]))/c
-            x[i] = (x[i]*c)-(s*l[i,k])
-    return l
+    if pychud_im:
+        if down:
+            return pychud.dchdd(L.T, X, overwrite_r=True)[0].T #if L is to be stored, set overwrite_r to False.
+        else:
+            pychud.dchud(L.T, X, overwrite_r=True).T
+    else:
+        l = L.copy()
+        x = X.copy()
+        d = len(x)
+        for k in xrange(d):
+            if down:
+                a=abs(l[k,k])
+                b=abs(x[k])
+                num = min([a,b])
+                den = max([a,b])
+                t = num/den
+                r = den*math.sqrt(1-(t*t))
+            else:
+                r = math.sqrt((l[k,k]**2)+(x[k]**2))
+            c = r/l[k,k]
+            s = x[k]/l[k,k]
+            l[k,k] = r
+            for i in xrange(k+1, d):
+                if down:
+                    l[i, k] = (l[i,k]- (s*x[i]))/c
+                else:
+                    l[i, k] = (l[i,k]+ (s*x[i]))/c
+                x[i] = (x[i]*c)-(s*l[i,k])
+        return l
 
 
 def gamma_pdf(x, alpha, theta, log_form=False):
