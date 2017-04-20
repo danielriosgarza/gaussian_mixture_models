@@ -105,6 +105,19 @@ def chol_of_the_inverse(cholA):
     p5 = linalg.solve_triangular(p4, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0)
     return np.fliplr(np.flipud(p5)).T
 
+
+def chol_of_the_inverse2(cholA):
+    '''same as above, usually the fastest'''
+    d = len(cholA)
+    v1 = linalg.solve_triangular(cholA, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0)
+    v2 = linalg.solve_triangular(cholA.T, v1, lower=0,trans=0, overwrite_b=1,check_finite=0)
+    return np.linalg.cholesky(v2)
+
+def chol_of_the_inverse3(cholA):
+    A = cholA.dot(cholA.T)
+    iA = np.linalg.inv(A)
+    return np.linalg.cholesky(iA)
+
 def scatter_matrix(X, E_mu = False, P_mu=None, P_k=1):
     '''get the scatter matrix of multidimensional data.
     with possibility of returning the empirical mean, since it's one of the steps in the
@@ -183,6 +196,17 @@ def store_sufficient_statistics_mvGaussian(X, P_mu=None, P_k=1):
     
     return {'n':n, 'E_mu':E_mu, 'S_m' :S_m}
 
+
+def sufficient_statistics_for_Gaussian_likelihood(X):
+    n = len(X)
+    d = len(X[0])
+    sX = np.einsum('ij->j', X)
+    C=np.einsum('ij,jk->ik',X.T,X)
+    em = sX/n
+    cC = np.linalg.cholesky(C)
+    invcC = chol_of_the_inverse(cC)
+    sm = cholesky_r1_update(cC, math.sqrt(n)*em, down=1)
+    return {'n':n, 'd':d, 'sX':sX, 'C_m':C, 'em':em, 'Chol_sm':sm, 'invChol_sm':sm}
 
 def multivariate_t_rvs_chol(mu, L, df, n=1):
     '''generate a random variable from multivariate t ditribution inputing directly the
@@ -741,7 +765,14 @@ def multivariate_Gaussian_likelihood_cov(SS_dict, log_form = 0):
     else:
         return math.exp(p1+p2+p3)
 
-
+def multivariate_Gaussian_likelihood_cached_suff_stat(ss_dict):
+    intrace=ss_dict['mean_factor']-ss_dict['sum_factor']+ss_dict['C_m']
+    trace = np.einsum('ij,ji', ss_dict['prec_m'].ss_dict['prec_m'], intrace)
+    p1 = -0.5*ss_dict['n']*ss_dict['d']*math.log(2*pi)
+    p2 = 0.5*chol_log_determinant(ss_dict['prec_m'])
+    p3 = -0.5*trace
+    return p1+p2+p3
+    
 
 def multivariate_Gaussian_rvs(mu, prec_m, chol=False):
     '''returns the a random multivariate Gaussian variable 
