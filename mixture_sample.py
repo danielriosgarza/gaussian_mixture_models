@@ -42,17 +42,24 @@ def store_chol_dict(ki_dict, X):
         chol_dict[i] = np.linalg.cholesky(a)
     return chol_dict
 
-def get_sufficient_statistics_from_chol(ki_dict, chol_dict, X, k):
+def get_sufficient_statistics_from_chol(ss_dict, ki_dict, chol_dict, X, k):
     ind = ki_dict[k]
     n = sum(ki_dict[k])
-    em = np.mean(X[ind], axis=0)
-    sqn=math.sqrt(n)
-    sm = uf.cholesky_r1_update(chol_dict[k], sqn*em, down=1)
-    cpm = uf.chol_of_the_inverse(sm)
-    chol_prec_m = uf.Wishart_rvs(df = n-1., S = cpm, chol=1)
-    mu = uf.multivariate_Gaussian_rvs(em, sqn*chol_prec_m, chol=1)
+    if n<3:
+        return ss_dict[k]
+    else:
+            
+        em = np.mean(X[ind], axis=0)
+        sqn=math.sqrt(n)
+        sm = uf.cholesky_r1_update(chol_dict[k], sqn*em, down=1)
+        cpm = uf.chol_of_the_inverse(sm)
+        chol_prec_m = uf.Wishart_rvs(df = n-1, S = cpm, chol=1)
+        mu = uf.multivariate_Gaussian_rvs(em, sqn*chol_prec_m, chol=1)
+        return {'cP_m' : chol_prec_m, 'n':n, 'mu':mu}
+         
     
-    return {'cP_m' : chol_prec_m, 'n':n, 'mu':mu}
+    
+    
 
     
 def assign_n_to_k(pi, ss_dict, K, data_point):
@@ -95,9 +102,9 @@ A1 = np.array([[11, 0.5*(sqrt(11*2))],[0.5*(sqrt(11*2)), 2]])
 A2 = np.array([[5, 0.9*(sqrt(5*12))],[0.9*(sqrt(5*12)), 12]])
 A3 = np.array([[8, 0.1*(sqrt(8*7))],[0.1*(sqrt(8*7)), 7]])
 
-mu1 = np.random.uniform(0,100, d)
-mu2 = np.random.uniform(0,100, d)
-mu3 = np.random.uniform(0,100, d)
+mu1 = np.random.uniform(0,1000, d)
+mu2 = np.random.uniform(0,1000, d)
+mu3 = np.random.uniform(0,1000, d)
 
 cvms = np.array([A1, A2, A3])
 mus = np.array([mu1, mu2, mu3])
@@ -116,41 +123,31 @@ chol_dict = store_chol_dict(ki_dict, X)
 
 
 pi_0 = np.random.dirichlet(pi_0)
-ss_dict = {i:get_sufficient_statistics_from_chol(ki_dict, chol_dict, X, i) for i in xrange(int(K))}
+s={}
+ss_dict = {i:get_sufficient_statistics_from_chol(s, ki_dict, chol_dict, X, i) for i in xrange(int(K))}
 
-assign_n_to_k(pi_0, ss_dict, K, X[0])
 
-c = []
-for i in xrange(len(ik_dict)):
-    if ik_dict[i]==0:
-        c.append('r')
-    elif ik_dict[i]==1:
-        c.append('b')
-    else:
-        c.append('orange')
 
-for i in xrange(len(ik_dict)):
-    print i
-    current_assign = ik_dict[i]
-    new_assign = assign_n_to_k(pi_0, ss_dict, K,X[0])
-    if current_assign==new_assign:
-        pass
-    else:
-        ki_dict[new_assign][i]=1
-        ki_dict[current_assign][i]=0
-        update_sample_to_chol(ki_dict, chol_dict, i, current_assign, X, remove=True)
-        ss_dict[current_assign]=get_sufficient_statistics_from_chol(ki_dict, chol_dict, X, current_assign)
-        ik_dict[i] = new_assign
-        update_sample_to_chol(ki_dict, chol_dict, i, new_assign, X, remove=False)
-        ss_dict[new_assign]=get_sufficient_statistics_from_chol(ki_dict, chol_dict, X, new_assign)
+def update_k_assignment(ik_dict,  ki_dict, chol_dict, ss_dict, pi_0, K, X):
+    for i in xrange(len(ik_dict)):
+       
+        current_assign = ik_dict[i]
+        new_assign = assign_n_to_k(pi_0, ss_dict, K,X[i])
+        if current_assign==new_assign:
+            pass
+        else:
+            update_sample_to_chol(ki_dict, chol_dict, i, current_assign, X, remove=True)
+            ss_dict[current_assign]=get_sufficient_statistics_from_chol(ss_dict, ki_dict, chol_dict, X, current_assign)
+            ik_dict[i] = new_assign
+            update_sample_to_chol(ki_dict, chol_dict, i, new_assign, X, remove=False)
+            ss_dict[new_assign]=get_sufficient_statistics_from_chol(ss_dict, ki_dict, chol_dict, X, new_assign)
 
-pi_0 = draw_pi_0(alpha_0, K, ki_dict)
 
-c2 = []
-for i in xrange(len(ik_dict)):
-    if ik_dict[i]==0:
-        c2.append('r')
-    elif ik_dict[i]==1:
-        c2.append('b')
-    else:
-        c2.append('orange')
+def Gibbs_sampler(t, ik_dict,  ki_dict, chol_dict, ss_dict, pi_0, alpha_0, K, X):
+    pis = pi_0.copy()
+    for i in xrange(t):
+        update_k_assignment(ik_dict,  ki_dict, chol_dict, ss_dict, pis, K, X)
+        pis= draw_pi_0(alpha_0, K, ki_dict)
+    return pis
+
+pg = Gibbs_sampler(40, ik_dict,  ki_dict, chol_dict, ss_dict, pi_0, alpha_0, K, X)
