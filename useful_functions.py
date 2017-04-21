@@ -77,7 +77,7 @@ def inv_and_chol(A, chol_of_A = False, chol_of_invA=False):
 
 
 
-def chol_of_the_inverse(cholA):
+def chol_of_the_inverse2(cholA):
     '''Take a Cholesky of matrix A and return the Cholesky
     decomposition of the inverse of A. The algorithm is based on the antidiagonal 
     matrix J and on the folowing equality:
@@ -106,12 +106,12 @@ def chol_of_the_inverse(cholA):
     return np.fliplr(np.flipud(p5)).T
 
 
-def chol_of_the_inverse2(cholA):
+def chol_of_the_inverse(cholA):
     '''same as above, usually the fastest'''
     d = len(cholA)
     v1 = linalg.solve_triangular(cholA, np.eye(d), lower=1,trans=0, overwrite_b=1,check_finite=0)
     v2 = linalg.solve_triangular(cholA.T, v1, lower=0,trans=0, overwrite_b=1,check_finite=0)
-    return np.linalg.cholesky(v2)
+    return linalg.cholesky(v2, lower=1, check_finite=0, overwrite_a=1)
 
 def chol_of_the_inverse3(cholA):
     A = cholA.dot(cholA.T)
@@ -197,7 +197,7 @@ def store_sufficient_statistics_mvGaussian(X, P_mu=None, P_k=1):
     return {'n':n, 'E_mu':E_mu, 'S_m' :S_m}
 
 
-def sufficient_statistics_for_Gaussian_likelihood(X):
+def store_sufficient_statistics_for_Gaussian_likelihood(X):
     n = len(X)
     d = len(X[0])
     sX = np.einsum('ij->j', X)
@@ -767,9 +767,9 @@ def multivariate_Gaussian_likelihood_cov(SS_dict, log_form = 0):
 
 def multivariate_Gaussian_likelihood_cached_suff_stat(ss_dict):
     intrace=ss_dict['mean_factor']-ss_dict['sum_factor']+ss_dict['C_m']
-    trace = np.einsum('ij,ji', ss_dict['prec_m'].ss_dict['prec_m'], intrace)
-    p1 = -0.5*ss_dict['n']*ss_dict['d']*math.log(2*pi)
-    p2 = 0.5*chol_log_determinant(ss_dict['prec_m'])
+    trace = np.einsum('ij,ji', ss_dict['ch_prec_m'].dot(ss_dict['ch_prec_m'].T), intrace)
+    p1 = -0.5*ss_dict['n']*ss_dict['d']*math.log(2*math.pi)
+    p2 = 0.5*chol_log_determinant(ss_dict['ch_prec_m'])
     p3 = -0.5*trace
     return p1+p2+p3
     
