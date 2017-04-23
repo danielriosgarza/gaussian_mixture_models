@@ -197,16 +197,16 @@ def store_sufficient_statistics_mvGaussian(X, P_mu=None, P_k=1):
     return {'n':n, 'E_mu':E_mu, 'S_m' :S_m}
 
 
-def store_sufficient_statistics_for_Gaussian_likelihood(X):
+def store_sufficient_statistics_for_Gaussian_likelihood(X, cX):
     n = len(X)
-    d = len(X[0])
     sX = np.einsum('ij->j', X)
-    C=np.einsum('ij,jk->ik',X.T,X)
     em = sX/n
+    C = np.einsum('ijk->jk', cX) 
     cC = np.linalg.cholesky(C)
-    invcC = chol_of_the_inverse(cC)
-    sm = cholesky_r1_update(cC, math.sqrt(n)*em, down=1)
-    return {'n':n, 'd':d, 'sX':sX, 'C_m':C, 'em':em, 'Chol_sm':sm, 'invChol_sm':sm}
+    #invcC = chol_of_the_inverse(cC)
+    sm = cholesky_r1_update(cC, math.sqrt(n)*em, down=1)#scatter matrix
+    ism = chol_of_the_inverse(sm)
+    return {'n':n,  'em':em,  'invChol_sm':ism}
 
 def multivariate_t_rvs_chol(mu, L, df, n=1):
     '''generate a random variable from multivariate t ditribution inputing directly the
