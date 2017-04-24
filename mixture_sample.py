@@ -5,6 +5,7 @@ import scipy.stats as sts
 import useful_functions as uf
 import math
 import opt_einsum as oe
+from scipy.special import gammaln as lggm
 
 #some np.einsum recipes: ('ik,kj,ij->i', X,A,X)- the quadratic form for subarrays in X and matrix A1
 #('i,j',X[i],X[i]) -XiXi'   ('ik, kj, zj, iz->i', X,cA,cA,X) - Xi'LL'Xi
@@ -25,28 +26,56 @@ def initial_assigment(X, n, pvals, K):
     return ki_dict, {i:zeros.copy() for i in xrange(n)}, np.einsum('ik, ij -> ikj', X,X) 
 
 
-def draw_Gaussian_parameters(ss_dict, L_dict_p, K,pi_m,X, ppd=False):
+def draw_Gaussian_parameters(ss_dict, L_dict_p, K,pi_m,X, ppd=False, collapsed=False):
     L_dict = L_dict_p.copy()
     for k in xrange(int(K)):
-        chol_prec_m = uf.Wishart_rvs(df = ss_dict[k]['n']-1., S = ss_dict[k]['invChol_sm'], chol=1) #draw chol decomposition of prec_m
-        mu = uf.multivariate_Gaussian_rvs(ss_dict[k]['em'], math.sqrt(ss_dict[k]['n'])*chol_prec_m, chol=1) #draw mean
-        #for likelihood
-        prec_m = chol_prec_m.dot(chol_prec_m.T)
-        x_mu = X-mu
-        m_dist_vec = 0.5*np.einsum('ik,kj,ij->i', x_mu ,prec_m,x_mu ) #faster than  np.einsum('ik, kj, zj, iz->i', x_mu,chol_prec_m ,chol_prec_m ,x_mu)
-        det = 0.5*uf.chol_log_determinant(chol_prec_m)
-        for i in xrange(len(X)):
-            L_dict[i][k] = Zconst+det-m_dist_vec[i]+pi_m[k]
+        if collapsed:
+            df = ss_dict[k]['n']-ss_dict[k]['d']
+            prec_coeff = (ss_dict[k]['n']*df)/math.sqrt((ss_dict[k]['n']+1.))
+            chol_prec_m = prec_coeff*ss_dict[k]['invChol_sm']
+            prec_m = chol_prec_m.dot(chol_prec_m.T)
+            mu = ss_dict[k]['em']
+            x_mu = X-mu
+            m_dist_vec = (1./df)*np.einsum('ik,kj,ij->i', x_mu ,prec_m,x_mu ) #faster than  np.einsum('ik, kj, zj, iz->i', x_mu,chol_prec_m ,chol_prec_m ,x_mu)
+            m_dist_vec_coeff = -0.5*(df+ss_dict[k]['d'])
+            m_dist_vec = 1+m_dist_vec
+            m_dist_vec = np.log(m_dist_vec)
+            m_dist_vec = m_dist_vec_coeff*m_dist_vec
+            det = 0.5*uf.chol_log_determinant(chol_prec_m)
+            p1 = lggm(0.5*(ss_dict[k]['n']))
+            p2 = -(math.log(0.5*df) +0.5*ss_dict[k]['d']*math.log(df) +Zconst)
+            for i in xrange(len(X)):
+                L_dict[i][k] = p1+p2+det+m_dist_vec[i]+pi_m[k]
+            if ppd:
+                    chol_prec_m = uf.Wishart_rvs(df = ss_dict[k]['n']-1., S = ss_dict[k]['invChol_sm'], chol=1) #draw chol decomposition of prec_m
+                    prec_m = chol_prec_m.dot(chol_prec_m.T)
+                    mu = uf.multivariate_Gaussian_rvs(ss_dict[k]['em'], math.sqrt(ss_dict[k]['n'])*chol_prec_m, chol=1) #draw mean
+                    ss_dict[k]['Sigma'] = np.linalg.inv(prec_m)
+                    ss_dict[k]['mu']=mu
+        else:
+                                                   
+            chol_prec_m = uf.Wishart_rvs(df = ss_dict[k]['n']-1., S = ss_dict[k]['invChol_sm'], chol=1) #draw chol decomposition of prec_m
+            mu = uf.multivariate_Gaussian_rvs(ss_dict[k]['em'], math.sqrt(ss_dict[k]['n'])*chol_prec_m, chol=1) #draw mean
+            #for likelihood
+            prec_m = chol_prec_m.dot(chol_prec_m.T)
+            x_mu = X-mu
+            m_dist_vec = 0.5*np.einsum('ik,kj,ij->i', x_mu ,prec_m,x_mu ) #faster than  np.einsum('ik, kj, zj, iz->i', x_mu,chol_prec_m ,chol_prec_m ,x_mu)
+            det = 0.5*uf.chol_log_determinant(chol_prec_m)
+            for i in xrange(len(X)):
+                L_dict[i][k] = Zconst+det-m_dist_vec[i]+pi_m[k]
 
-        if ppd:
-            ss_dict[k]['Sigma'] = np.linalg.inv(prec_m)
-            ss_dict[k]['mu']=mu
+                if ppd:
+                    ss_dict[k]['Sigma'] = np.linalg.inv(prec_m)
+                    ss_dict[k]['mu']=mu
         
     return L_dict
         
-def update_Likelihood_dict(ki_dict,L_dict_p, X,cX, K, pi_m):
+def update_Likelihood_dict(ki_dict,L_dict_p, X,cX, K, pi_m, collapsed=False):
     ss_dict={k:uf.store_sufficient_statistics_for_Gaussian_likelihood(X[ki_dict[k]],cX[ki_dict[k]]) for k in xrange(int(K))}
-    L_dict = draw_Gaussian_parameters(ss_dict, L_dict_p, K, pi_m,X)
+    if collapsed:
+        L_dict = draw_Gaussian_parameters(ss_dict, L_dict_p, K, pi_m,X, collapsed=True)
+    else:
+        L_dict = draw_Gaussian_parameters(ss_dict, L_dict_p, K, pi_m,X)
     return L_dict        
 
 def normalize_L(L):
@@ -67,23 +96,42 @@ def draw_pi(alpha_0, ki_dict,K):
     return np.log(p)
 
 
-def Gibbs_sampler(T, X, cX, ki_dict, L_dict, K, n, alpha_0):
+def Gibbs_sampler(T, X, cX, ki_dict, L_dict, K, n, alpha_0,collapsed=False):
     pi_m = draw_pi(alpha_0, ki_dict, K)
     K_up = int(K)
-    for t in xrange(T):
-        w = 0
-        L_dict = update_Likelihood_dict(ki_dict, L_dict,X, cX, K_up, pi_m) #0.002
-        ki_dict = assign_Xi_to_k(L_dict, K_up, n)#0.006
-        if 0 in [sum(ki_dict[k]) for k in xrange(K_up)]: #0.0001
-            ki_dict, L_dict, cX = initial_assigment(X,n, p, K)#0.0007
-        w+=1
-        pi_m = draw_pi(alpha_0, ki_dict, K_up)#0.0002
-        if w>50:
-            K_up-=1
-            print K_up
-    posterior_param_dict = {k:uf.store_sufficient_statistics_for_Gaussian_likelihood(X[ki_dict[k]], cX[ki_dict[k]]) for k in xrange(int(K))}#0.001
-    L_dict = draw_Gaussian_parameters(posterior_param_dict, L_dict, K, pi_m,X, ppd=1)#0.003
-    return np.exp(pi_m), posterior_param_dict
+    if collapsed:
+            
+        for t in xrange(T):
+            w = 0
+            L_dict = update_Likelihood_dict(ki_dict, L_dict,X, cX, K_up, pi_m, collapsed=True) #0.002
+            ki_dict = assign_Xi_to_k(L_dict, K_up, n)#0.006
+            if 0 in [sum(ki_dict[k]) for k in xrange(K_up)]: #0.0001
+                ki_dict, L_dict, cX = initial_assigment(X,n, p, K)#0.0007
+            w+=1
+            pi_m = draw_pi(alpha_0, ki_dict, K_up)#0.0002
+            if w>50:
+                K_up-=1
+                print K_up
+        posterior_param_dict = {k:uf.store_sufficient_statistics_for_Gaussian_likelihood(X[ki_dict[k]], cX[ki_dict[k]]) for k in xrange(int(K))}#0.001
+        L_dict = draw_Gaussian_parameters(posterior_param_dict, L_dict, K, pi_m,X, ppd=1, collapsed=True)#0.003
+        return np.exp(pi_m), posterior_param_dict
+        
+    else:
+    
+        for t in xrange(T):
+            w = 0
+            L_dict = update_Likelihood_dict(ki_dict, L_dict,X, cX, K_up, pi_m) #0.002
+            ki_dict = assign_Xi_to_k(L_dict, K_up, n)#0.006
+            if 0 in [sum(ki_dict[k]) for k in xrange(K_up)]: #0.0001
+                ki_dict, L_dict, cX = initial_assigment(X,n, p, K)#0.0007
+            w+=1
+            pi_m = draw_pi(alpha_0, ki_dict, K_up)#0.0002
+            if w>50:
+                K_up-=1
+                print K_up
+        posterior_param_dict = {k:uf.store_sufficient_statistics_for_Gaussian_likelihood(X[ki_dict[k]], cX[ki_dict[k]]) for k in xrange(int(K))}#0.001
+        L_dict = draw_Gaussian_parameters(posterior_param_dict, L_dict, K, pi_m,X, ppd=1)#0.003
+        return np.exp(pi_m), posterior_param_dict
     
     
 
