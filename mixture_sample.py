@@ -4,14 +4,36 @@ import numpy as np
 import scipy.stats as sts
 import useful_functions as uf
 import math
-import opt_einsum as oe
 from scipy.special import gammaln as lggm
 
 #some np.einsum recipes: ('ik,kj,ij->i', X,A,X)- the quadratic form for subarrays in X and matrix A1
 #('i,j',X[i],X[i]) -XiXi'   ('ik, kj, zj, iz->i', X,cA,cA,X) - Xi'LL'Xi
 
 
-def initial_assigment(X, n, pvals, K):
+def initial_assigment(X, pvals, K):
+    '''Create initial data structures for a Bayesian Gaussian mixture model.
+    
+     Parameters
+     --------
+     
+      X: array-like
+      nxd multidimensional data. n represents the number of samples (len (X)) and d the dimensionality (len(X[0])).
+      pvals: array-like
+      vector of probabilities initially assigned to each cluster K (consists of K numbers between 0 and 1 that 
+      add to 1). 
+      K: int
+      number of clusters.
+      
+      Output
+      --------
+      ki_dict: dict
+      boolean mapping of clusters to indices of X.
+      L_dict_prot: dict
+      mapping of n indices of X to k zeros that will be replaced for likelihood values.
+      sX: array-like
+      n matrices consisting of XiXi' for each data-point'''
+
+    n = len(X)
     ki_dict={i:np.zeros(n, dtype=np.bool) for i in xrange(int(K))} #boolean mapping samples to cluster k
     zeros=np.zeros(int(K)) #for likelihood prototype dict
     indices =np.arange(n)
@@ -30,28 +52,31 @@ def draw_Gaussian_parameters(ss_dict, L_dict_p, K,pi_m,X, ppd=False, collapsed=F
     L_dict = L_dict_p.copy()
     for k in xrange(int(K)):
         if collapsed:
-            df = ss_dict[k]['n']-ss_dict[k]['d']
-            prec_coeff = (ss_dict[k]['n']*df)/math.sqrt((ss_dict[k]['n']+1.))
-            chol_prec_m = prec_coeff*ss_dict[k]['invChol_sm']
-            prec_m = chol_prec_m.dot(chol_prec_m.T)
+            chol_prec_m = ss_dict[k]['invChol_sm']
             mu = ss_dict[k]['em']
+            df = ss_dict[k]['n']-ss_dict[k]['d']
+            if df<1:
+                #print 'setting df to 1'
+                df=1
+            chol_prec_m = math.sqrt((ss_dict[k]['n']*df)/(ss_dict[k]['n']+1))*chol_prec_m
+            prec_m = chol_prec_m.dot(chol_prec_m.T)
             x_mu = X-mu
-            m_dist_vec = (1./df)*np.einsum('ik,kj,ij->i', x_mu ,prec_m,x_mu ) #faster than  np.einsum('ik, kj, zj, iz->i', x_mu,chol_prec_m ,chol_prec_m ,x_mu)
-            m_dist_vec_coeff = -0.5*(df+ss_dict[k]['d'])
-            m_dist_vec = 1+m_dist_vec
-            m_dist_vec = np.log(m_dist_vec)
-            m_dist_vec = m_dist_vec_coeff*m_dist_vec
-            det = 0.5*uf.chol_log_determinant(chol_prec_m)
-            p1 = lggm(0.5*(ss_dict[k]['n']))
-            p2 = -(math.log(0.5*df) +0.5*ss_dict[k]['d']*math.log(df) +Zconst)
+            m_dist_vec = np.einsum('ik,kj,ij->i', x_mu ,prec_m,x_mu ) 
+            m_dist_vec = 1+(1./df)*m_dist_vec
+            p1 = lggm(0.5*ss_dict[k]['n'])
+            p2 = -lggm(0.5*df)
+            p3 = -0.5*ss_dict[k]['d']*math.log(df)
+            p4 = Zconst
+            p5 = 0.5*uf.chol_log_determinant(chol_prec_m)
+            p6 = -(0.5*ss_dict[k]['n'])*np.log(m_dist_vec)
             for i in xrange(len(X)):
-                L_dict[i][k] = p1+p2+det+m_dist_vec[i]+pi_m[k]
+                L_dict[i][k] = p1+p2+p3+p4+p5+p6[i]+pi_m[k]
             if ppd:
-                    chol_prec_m = uf.Wishart_rvs(df = ss_dict[k]['n']-1., S = ss_dict[k]['invChol_sm'], chol=1) #draw chol decomposition of prec_m
-                    prec_m = chol_prec_m.dot(chol_prec_m.T)
-                    mu = uf.multivariate_Gaussian_rvs(ss_dict[k]['em'], math.sqrt(ss_dict[k]['n'])*chol_prec_m, chol=1) #draw mean
-                    ss_dict[k]['Sigma'] = np.linalg.inv(prec_m)
-                    ss_dict[k]['mu']=mu
+                chol_prec_m = uf.Wishart_rvs(df = ss_dict[k]['n']-1., S = ss_dict[k]['invChol_sm'], chol=1) #draw chol decomposition of prec_m
+                mu = uf.multivariate_Gaussian_rvs(ss_dict[k]['em'], math.sqrt(ss_dict[k]['n'])*chol_prec_m, chol=1) #draw mean
+                prec_m = chol_prec_m.dot(chol_prec_m.T)
+                ss_dict[k]['Sigma'] = np.linalg.inv(prec_m)
+                ss_dict[k]['mu']=mu
         else:
                                                    
             chol_prec_m = uf.Wishart_rvs(df = ss_dict[k]['n']-1., S = ss_dict[k]['invChol_sm'], chol=1) #draw chol decomposition of prec_m
@@ -64,9 +89,9 @@ def draw_Gaussian_parameters(ss_dict, L_dict_p, K,pi_m,X, ppd=False, collapsed=F
             for i in xrange(len(X)):
                 L_dict[i][k] = Zconst+det-m_dist_vec[i]+pi_m[k]
 
-                if ppd:
-                    ss_dict[k]['Sigma'] = np.linalg.inv(prec_m)
-                    ss_dict[k]['mu']=mu
+            if ppd:
+                ss_dict[k]['Sigma'] = np.linalg.inv(prec_m)
+                ss_dict[k]['mu']=mu
         
     return L_dict
         
@@ -99,15 +124,16 @@ def draw_pi(alpha_0, ki_dict,K):
 def Gibbs_sampler(T, X, cX, ki_dict, L_dict, K, n, alpha_0,collapsed=False):
     pi_m = draw_pi(alpha_0, ki_dict, K)
     K_up = int(K)
+    w = 0
+
     if collapsed:
             
         for t in xrange(T):
-            w = 0
             L_dict = update_Likelihood_dict(ki_dict, L_dict,X, cX, K_up, pi_m, collapsed=True) #0.002
             ki_dict = assign_Xi_to_k(L_dict, K_up, n)#0.006
             if 0 in [sum(ki_dict[k]) for k in xrange(K_up)]: #0.0001
-                ki_dict, L_dict, cX = initial_assigment(X,n, p, K)#0.0007
-            w+=1
+                ki_dict, L_dict, cX = initial_assigment(X,p, K)#0.0007
+                w+=1
             pi_m = draw_pi(alpha_0, ki_dict, K_up)#0.0002
             if w>50:
                 K_up-=1
@@ -119,12 +145,13 @@ def Gibbs_sampler(T, X, cX, ki_dict, L_dict, K, n, alpha_0,collapsed=False):
     else:
     
         for t in xrange(T):
-            w = 0
+            
             L_dict = update_Likelihood_dict(ki_dict, L_dict,X, cX, K_up, pi_m) #0.002
             ki_dict = assign_Xi_to_k(L_dict, K_up, n)#0.006
             if 0 in [sum(ki_dict[k]) for k in xrange(K_up)]: #0.0001
-                ki_dict, L_dict, cX = initial_assigment(X,n, p, K)#0.0007
-            w+=1
+                ki_dict, L_dict, cX = initial_assigment(X, p, K)#0.0007
+                w+=1
+                print w
             pi_m = draw_pi(alpha_0, ki_dict, K_up)#0.0002
             if w>50:
                 K_up-=1
@@ -136,9 +163,9 @@ def Gibbs_sampler(T, X, cX, ki_dict, L_dict, K, n, alpha_0,collapsed=False):
     
 
 
-d = 2 #indexed by j
+d = 50 #indexed by j
 Zconst = -0.5*d*math.log(2*math.pi) #constant for the mvGaussian
-n=600 #indexed by i
+n=1000 #indexed by i
 K=3. #indexed by k
 alpha_0 = 10.
 
@@ -148,24 +175,26 @@ pi_0 = np.array([alpha_0/K for i in xrange(int(K))])
 true_pi= np.array([300., 200.,100.])
 p = true_pi/sum(true_pi)
 
-A1 = np.array([[11, 0.5*(sqrt(11*2))],[0.5*(sqrt(11*2)), 2]])
-A2 = np.array([[5, 0.9*(sqrt(5*12))],[0.9*(sqrt(5*12)), 12]])
-A3 = np.array([[8, 0.1*(sqrt(8*7))],[0.1*(sqrt(8*7)), 7]])
+#A1 = np.array([[11, 0.5*(sqrt(11*2))],[0.5*(sqrt(11*2)), 2]])
+#A2 = np.array([[5, 0.9*(sqrt(5*12))],[0.9*(sqrt(5*12)), 12]])
+#A3 = np.array([[8, 0.1*(sqrt(8*7))],[0.1*(sqrt(8*7)), 7]])
 
-mu1 = np.random.uniform(0,1000, d)
-mu2 = np.random.uniform(0,1000, d)
-mu3 = np.random.uniform(0,1000, d)
+A1 = 100*np.random.rand(d,d)
+A1 = A1.dot(A1.T)
+
+A2 = 100*np.random.rand(d,d)
+A2 = A2.dot(A2.T)
+
+A3 = 100*np.random.rand(d,d)
+A3 = A3.dot(A3.T)
+
+mu1 = np.random.uniform(-100,1000, d)
+mu2 = np.random.uniform(-100,1000, d)
+mu3 = np.random.uniform(-100,1000, d)
 
 cvms = np.array([A1, A2, A3])
 mus = np.array([mu1, mu2, mu3])
 
-
-def s1(X,cA):
-    A = cA.dot(cA.T)
-    return np.einsum('ik,kj,ij->i', X,A,X) 
-
-def s2(X,cA):
-    return oe.contract('ik, kj, zj, iz->i', X,cA,cA,X)
 
 X = []
 
@@ -177,6 +206,6 @@ X = np.array(X)
     
 pi_m = np.random.dirichlet(pi_0)
 pi_m  = np.log(pi_m)
-ki_dict, L_dict, cX = initial_assigment(X,n, p, K)
+ki_dict, L_dict, cX = initial_assigment(X,p, K)
 L_dict = update_Likelihood_dict(ki_dict, L_dict,X, cX, K, pi_m)
 
