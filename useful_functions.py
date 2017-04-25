@@ -32,6 +32,15 @@ def fancy_inversion(A):
     n = np.fliplr(np.flipud(inv_c))
     return trm(alpha=1, a=n.T, b=n,lower=1)
 
+
+def cholesky_approx_positive_semidefinite(A):
+    a,b = eigh(0.5*(A+A.T))
+    a[a<0]=0
+    a = diag(a)
+    B = b.dot(a).dot(b.T)
+    return linalg.cholesky(B+np.eye(len(A[0])), lower=1, check_finite=0,overwrite_a=1)
+    
+
 def inv_and_chol(A, chol_of_A = False, chol_of_invA=False):
     '''return the cholesky factorization and the inverse of matrix A.
     Or the inverse and the Cholesky factorization of the inverse.
@@ -201,12 +210,17 @@ def store_sufficient_statistics_for_Gaussian_likelihood(X, cX):
     n = len(X)
     d = len(X[0])
     sX = np.einsum('ij->j', X)
-    em = sX/n
+    em = sX/n #empirical mean
     C = np.einsum('ijk->jk', cX) 
-    cC = np.linalg.cholesky(C)
+    sm = C - n*np.einsum('i,j', em,em)
+    try:
+        csm = linalg.cholesky(sm, lower=1, check_finite=0,overwrite_a=1)  
+    except LinAlgError:
+        print 'matrix not positive definite. Dealing with it as positive semi-definite. Could result in error.'
+        csm = cholesky_approx_positive_semidefinite(sm)
     #invcC = chol_of_the_inverse(cC)
-    sm = cholesky_r1_update(cC, math.sqrt(n)*em, down=1)#scatter matrix
-    ism = chol_of_the_inverse(sm)
+    #sm = cholesky_r1_update(cC, math.sqrt(n)*em, down=1)#scatter matrix
+    ism = chol_of_the_inverse(csm)
     return {'n':n, 'd':d,  'em':em,  'invChol_sm':ism}
 
 def multivariate_t_rvs_chol(mu, L, df, n=1):
@@ -499,6 +513,9 @@ def Wishart_rvs(df, S, chol=0):
     and if chol is selected, the function returns the cholesky decomposition of W'''
     
     d = S.shape[0] #dimensions
+    if df<d+1:
+        df = d+1
+        'print setting degrees of freedom to be equal to dim+1.'
     ind = np.tril_indices(d,-1) #lower triangular non-diagonal elements
     B = np.zeros((d,d)) 
     norm = np.random.standard_normal(len(ind[0])) #normal samples for the lower triangular non-diagonal elements
