@@ -6,6 +6,18 @@ from Cholesky import Cholesky
 trm = linalg.get_blas_funcs('trmm')
 
 class Gaussian_variable:
+    '''Methods for a multivariate Gaussian model object. 
+    Can be called by minimally assigning a number of dimensions. In this case, a standard normal variable is created.
+    One can also specify a mean vector (mu), a sample vector (X), and a matrix (S). The supported methods for S are:
+        'cov' - assumes that S is a covariance matrix
+        'chol_cov' -assumes that S is the Cholesky dec. of the covariance matrix
+        'prec' - assumes that S is a precision matrix (inverse of the covariance)
+        'chol_prec' - assumes that S is the Cholesky dec. of the precision matrix.
+        
+    For example, if S is the lower Cholesky decomposition of the precision matrix, then:
+    >Gaussian_variable(mu, X, S, method='chol_prec').logp()
+    returns the same result as:
+    >scipy.stats.multivariate_normal(mean=mu, cov= np.linalg.inv(S.dot(S.T)).logpdf(X)''' 
     
     def __init__(self, d, X=None, S=None,  mu=None, method = 'cov'):
         if X is None:
@@ -30,6 +42,7 @@ class Gaussian_variable:
             return S
     
     def __cov(self):
+        '''returns the covariance matrix'''
         if self.S is None:
             return np.eye(self.d)
         elif self.method=='cov':
@@ -42,6 +55,7 @@ class Gaussian_variable:
             return Cholesky(self.S).inv(self.S)    
     
     def __chol_cov(self):
+        '''returns the Cholesky dec. of the covariance matrix'''
         if self.S is None:
             return np.eye(self.d)
         elif self.method=='cov':
@@ -54,6 +68,7 @@ class Gaussian_variable:
             return Cholesky(self.S).chol_of_the_inv(self.S)    
     
     def __prec(self):
+        '''returns the precision matrix'''
         if self.S is None:
             return np.eye(self.d)
         elif self.method=='cov':
@@ -66,6 +81,7 @@ class Gaussian_variable:
             return Cholesky(self.S).mat(self.S)
     
     def __chol_prec(self):
+        '''returns the Cholesky dec. of the precision matrix'''
         if self.S is None:
             return np.eye(self.d)
         elif self.method=='cov':
@@ -78,20 +94,19 @@ class Gaussian_variable:
             return self.S
     
     def delta(self):
+        'returns (X-mu)'''
         return self.X-self.mu
-
+    def x_x_t_m(self):
+        '''returns the matrix XX' '''
+        return np.einsum('i,j->ij', self.X, self.X)
     def rvs(self, n=1):
     
-        '''returns the a random multivariate Gaussian variable 
-        from a mean and the Cholesky decomposition of the precision matrix.
-        To be used in Normal-Wishart sampler or similar approaches
-        where only the precision matrix is available, avoiding matrix inversions.
-        It has a slightly different output than numpy or scipy
-        multivariate normal rvs, but has similar statistical properties.
+        '''returns a random multivariate Gaussian variable 
+        to avoid matrix iversions, provide the precision matrix. Method has a slightly different 
+        output than numpy or scipy's multivariate normal rvs, but has similar statistical properties.
         The algorithm is mentioned in the book 'Handbook of Monte Carlo Methods'
         from Kroese et al.(2011) (algorithm 5.2, pag. 155)'''
-        
-        
+               
         m = self.__chol_prec().T
         Z = np.random.standard_normal(size=(self.d,n))
         return self.mu + linalg.solve_triangular(m, Z, lower=0, overwrite_b=1, check_finite=0).T
@@ -117,6 +132,7 @@ class Gaussian_variable:
         return (-0.5*self.d)*math.log(2*math.pi) + 0.5*det -0.5*in_exp
     
     def p(self):
+        '''returns the pdf estimate of X'''
         return math.exp(self.logp())
     
         
