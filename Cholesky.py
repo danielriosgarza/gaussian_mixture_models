@@ -37,6 +37,16 @@ class Cholesky:
         self.d = len(A)
         self.verbose=verbose
 
+    def mat(self, chol_A=None, config='lower'):
+        '''return the orginal matrix when given an upper or lower Cholesky decomposition.'''
+
+        if chol_A is None:
+            return self.matrix
+        elif config=='lower':
+            return trm(alpha=1, a=chol_A, b=chol_A.T,lower=1)
+        else:
+            return trm(alpha=1, a=chol_A.T, b=chol_A,lower=1)
+
     def upper(self):
         '''return the upper triangular Cholesky decompostion of A.
         If A is a postive definite matrix, and U is its upper triangular Cholesky decomposition.
