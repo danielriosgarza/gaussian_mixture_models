@@ -8,22 +8,22 @@ trm = linalg.get_blas_funcs('trmm')
 class Gaussian_variable:
     '''Methods for a multivariate Gaussian model object. 
     Can be called by minimally assigning a number of dimensions. In this case, a standard normal variable is created.
-    One can also specify a mean vector (mu), a sample vector (X), and a matrix (S). The supported methods for S are:
+    One can also specify a mean vector (mu), a sample vector (Xi), and a matrix (S). The supported methods for S are:
         'cov' - assumes that S is a covariance matrix
         'chol_cov' -assumes that S is the Cholesky dec. of the covariance matrix
         'prec' - assumes that S is a precision matrix (inverse of the covariance)
         'chol_prec' - assumes that S is the Cholesky dec. of the precision matrix.
         
     For example, if S is the lower Cholesky decomposition of the precision matrix, then:
-    >Gaussian_variable(mu, X, S, method='chol_prec').logp()
+    >Gaussian_variable(mu, Xi, S, method='chol_prec').logp()
     returns the same result as:
     >scipy.stats.multivariate_normal(mean=mu, cov= np.linalg.inv(S.dot(S.T)).logpdf(X)''' 
     
-    def __init__(self, d, X=None, S=None,  mu=None, method = 'cov'):
-        if X is None:
-            self.X = np.zeros(d)
+    def __init__(self, d, Xi=None, S=None,  mu=None, method = 'cov'):
+        if Xi is None:
+            self.Xi = np.zeros(d)
         else:
-            self.X = X
+            self.Xi = Xi
         self.d = d
         self.method = method
         self.mu = self.__mu(mu)
@@ -94,13 +94,13 @@ class Gaussian_variable:
             return self.S
     
     def delta(self):
-        'returns (X-mu)'''
-        return self.X-self.mu
-    def x_x_t_m(self):
-        '''returns the matrix XX' '''
-        return np.einsum('i,j->ij', self.X, self.X)
+        'returns (Xi-mu)'''
+        return self.Xi-self.mu
+    def xi_xit(self):
+        '''returns the matrix XiXi' '''
+        return np.einsum('i,j->ij', self.Xi, self.Xi)
+        
     def rvs(self, n=1):
-    
         '''returns a random multivariate Gaussian variable 
         to avoid matrix iversions, provide the precision matrix. Method has a slightly different 
         output than numpy or scipy's multivariate normal rvs, but has similar statistical properties.
@@ -120,7 +120,7 @@ class Gaussian_variable:
         
         Outputs
         --------
-        logpdf estimate of X'''
+        logpdf estimate of Xi'''
         
         pm = self.__prec()
         cpm = self.__chol_prec()
@@ -132,7 +132,7 @@ class Gaussian_variable:
         return (-0.5*self.d)*math.log(2*math.pi) + 0.5*det -0.5*in_exp
     
     def p(self):
-        '''returns the pdf estimate of X'''
+        '''returns the pdf estimate of Xi'''
         return math.exp(self.logp())
     
         
