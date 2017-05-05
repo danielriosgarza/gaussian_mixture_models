@@ -4,9 +4,9 @@ import math
 import scipy.linalg as linalg
 from Cholesky import Cholesky
 from Gaussian_variable import Gaussian_variable
+from Gauss_Wishart_probability_model import Gauss_Wishart_probability_model
 import random
 trm = linalg.get_blas_funcs('trmm')
-from scipy.special import gammaln as gamlog
 
 
 class Gaussian_component:
@@ -289,19 +289,7 @@ class Gaussian_component:
         else:
             pass
         
-    
-    def __normalizing_Z(self, d,kappa,v,S):
         
-        if v<d:
-            df = d+1
-        else:
-            df= v+1
-        if kappa==0:
-            kt=0
-        else:
-            kt = 0.5*d*math.log(kappa)
-        return (0.5*df*d*math.log(2))+ ((0.25*((d**2)+d))*math.log(math.pi)) - kt \
-        -(((df-1)/2)*Cholesky(S).log_determinant(chol_A=S))+sum(gamlog(df-np.arange(d)))
         
     def chol_prec_rvs(self):
         if self.v_0+self.n<self.d+1:
