@@ -48,6 +48,8 @@ class Gaussian_component:
         
         self.mu= self.__mu()
         
+        self.emp_mu = self.__emp_mu()
+        
         self.XX_T=None
         
         self.cov = None
@@ -76,6 +78,15 @@ class Gaussian_component:
         else:
             self.mu = (self.kappa_0*self.mu_0 + self.__sX(self.X))/(self.kappa_0+self.n)
             return self.mu
+    
+    def __emp_mu(self):
+        if self.n is 0:
+            self.emp_mu = self.mu_0 
+            return self.emp_mu
+        else:
+            self.emp_mu = (self.__sX(self.X))/(self.n)
+            return self.emp_mu
+
 
     def __XX_T(self):
         self.XX_T = np.einsum('ij, iz->jz', self.X, self.X)
@@ -198,7 +209,7 @@ class Gaussian_component:
     
     def s_up_date(self, Xi, cov=False, chol_cov=False, prec=False, chol_prec=False):
         
-        Xi=Xi.flatten()         
+               
 
         if self.n==0:
             self.n=1
@@ -232,7 +243,7 @@ class Gaussian_component:
             
             return None
         
-        
+          
         n_c = self.n        
         self.n+=1
         mu_c = self.mu.copy()
@@ -250,12 +261,12 @@ class Gaussian_component:
         if self.X is None:
             pass
         else:
-            self.X = np.concatenate([self.X, [Xi]])
+            self.X = np.concatenate([self.X, Xi])
         
         if self.XX_T is None:
             pass
         else:
-            self.XX_T += np.einsum('i,j->ij', Xi, Xi)
+            self.XX_T += np.einsum('i,j->ij', Xi.flatten(), Xi.flatten())
         
         if self.cov is None:
             pass
